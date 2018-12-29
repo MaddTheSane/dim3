@@ -592,7 +592,7 @@
 		26F7E1A0160047D900E739C4 /* interface.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = interface.h; path = Headers/interface.h; sourceTree = "<group>"; };
 		26F7EE0719A1BC3E006DD077 /* model_auto_generate_bone.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_auto_generate_bone.c; sourceTree = "<group>"; };
 		26F7EE0819A1BC3E006DD077 /* model_auto_generate_decorations.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_auto_generate_decorations.c; sourceTree = "<group>"; };
-		55EECBCC21D6F35500F70D5D /* Media.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Media.xcassets; sourceTree = "<group>"; };
+		55EECBCC21D6F35500F70D5D /* Media.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Media.xcassets; path = Resources/Media.xcassets; sourceTree = "<group>"; };
 		55EECBCE21D6F72A00F70D5D /* model_auto_generate_pieces.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_auto_generate_pieces.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
