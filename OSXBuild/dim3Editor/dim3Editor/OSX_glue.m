@@ -622,7 +622,8 @@ NSControl* os_dialog_id_to_ctrl(int id)
 
 bool os_dialog_run(char *title,int wid,int high,os_dialog_ctrl_type *ctrls,void *callback)
 {
-	int						n,idx,result,deskWid,deskHigh;
+	int						n,idx,deskWid,deskHigh;
+	NSModalResponse result;
 	NSUInteger				styleMask;
 	NSString				*nsTitle;
 	NSRect					deskTopRect,frame,innerFrame;

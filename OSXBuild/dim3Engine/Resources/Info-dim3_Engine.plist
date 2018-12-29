@@ -13,7 +13,7 @@
 	<key>CFBundleIconFile</key>
 	<string>dim3 Engine.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.klinksoftware.dim3.engine</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -24,17 +24,9 @@
 	<string>3.0</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
-	<key>CFBundleURLTypes</key>
-	<array/>
 	<key>CFBundleVersion</key>
 	<string>3.0</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
-	<key>NSServices</key>
-	<array/>
-	<key>UTExportedTypeDeclarations</key>
-	<array/>
-	<key>UTImportedTypeDeclarations</key>
-	<array/>
 </dict>
 </plist>

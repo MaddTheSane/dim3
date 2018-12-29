@@ -6,6 +6,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>${EXECUTABLE_NAME}</string>
+	<key>CFBundleIconFile</key>
+	<string>dim3 Editor.icns</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.klinksoftware.dim3Editor</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -26,8 +28,8 @@
 	<string>${MACOSX_DEPLOYMENT_TARGET}</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2012 Klink! Software. All rights reserved.</string>
-	<key>CFBundleIconFile</key>
-	<string>dim3 Editor.icns</string>
+	<key>NSMainNibFile</key>
+	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

@@ -11,76 +11,6 @@
 		26159D2716D1AA6D0069B442 /* project_palette_label.c in Sources */ = {isa = PBXBuildFile; fileRef = 26159D2516D1AA6C0069B442 /* project_palette_label.c */; };
 		26159D2816D1AA6D0069B442 /* project_palette_labels.c in Sources */ = {isa = PBXBuildFile; fileRef = 26159D2616D1AA6D0069B442 /* project_palette_labels.c */; };
 		2620AFD71682B68E00A3C76F /* map_view_auto_generator.c in Sources */ = {isa = PBXBuildFile; fileRef = 2620AFD61682B68E00A3C76F /* map_view_auto_generator.c */; };
-		2621459A1605086A00F18538 /* Back.png in Copy List Icons */ = {isa = PBXBuildFile; fileRef = 26214575160503FA00F18538 /* Back.png */; };
-		2621459B1605086A00F18538 /* Edit.png in Copy List Icons */ = {isa = PBXBuildFile; fileRef = 26214576160503FA00F18538 /* Edit.png */; };
-		2621459C1605086A00F18538 /* Minus.png in Copy List Icons */ = {isa = PBXBuildFile; fileRef = 26214577160503FA00F18538 /* Minus.png */; };
-		2621459D1605086A00F18538 /* Plus.png in Copy List Icons */ = {isa = PBXBuildFile; fileRef = 26214578160503FA00F18538 /* Plus.png */; };
-		2621459E1605086A00F18538 /* Set.png in Copy List Icons */ = {isa = PBXBuildFile; fileRef = 26214579160503FA00F18538 /* Set.png */; };
-		2621459F1605087F00F18538 /* Tool Run Project.png in Copy Project Tools */ = {isa = PBXBuildFile; fileRef = 26214538160503F200F18538 /* Tool Run Project.png */; };
-		262145A0160508A700F18538 /* Tool Auto-Texture Mesh.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 262144FD160503F200F18538 /* Tool Auto-Texture Mesh.png */; };
-		262145A1160508A700F18538 /* Tool Combine Meshes.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 262144FE160503F200F18538 /* Tool Combine Meshes.png */; };
-		262145A2160508A700F18538 /* Tool Cull.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 262144FF160503F200F18538 /* Tool Cull.png */; };
-		262145A3160508A700F18538 /* Tool Edit Map Script.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214500160503F200F18538 /* Tool Edit Map Script.png */; };
-		262145A4160508A700F18538 /* Tool Edit Mesh.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214501160503F200F18538 /* Tool Edit Mesh.png */; };
-		262145A5160508A700F18538 /* Tool Edit Polygons.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214502160503F200F18538 /* Tool Edit Polygons.png */; };
-		262145A6160508A700F18538 /* Tool Edit Vertexes.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214503160503F200F18538 /* Tool Edit Vertexes.png */; };
-		262145A7160508A700F18538 /* Tool Free Look.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214504160503F200F18538 /* Tool Free Look.png */; };
-		262145A8160508A700F18538 /* Tool Grid.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214505160503F200F18538 /* Tool Grid.png */; };
-		262145A9160508A700F18538 /* Tool Height Map.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214506160503F200F18538 /* Tool Height Map.png */; };
-		262145AA160508A700F18538 /* Tool Large Grid.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214507160503F200F18538 /* Tool Large Grid.png */; };
-		262145AB160508A700F18538 /* Tool Light.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214508160503F200F18538 /* Tool Light.png */; };
-		262145AC160508A700F18538 /* Tool Liquid.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214509160503F200F18538 /* Tool Liquid.png */; };
-		262145AD160508A700F18538 /* Tool Mesh UV.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621450A160503F200F18538 /* Tool Mesh UV.png */; };
-		262145AE160508A700F18538 /* Tool Mesh.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621450B160503F200F18538 /* Tool Mesh.png */; };
-		262145AF160508A700F18538 /* Tool Move Mode.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621450C160503F200F18538 /* Tool Move Mode.png */; };
-		262145B0160508A700F18538 /* Tool Move Points Together.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621450D160503F200F18538 /* Tool Move Points Together.png */; };
-		262145B1160508A700F18538 /* Tool Move Points.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621450E160503F200F18538 /* Tool Move Points.png */; };
-		262145B2160508A700F18538 /* Tool No Grid.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621450F160503F200F18538 /* Tool No Grid.png */; };
-		262145B3160508A700F18538 /* Tool Node Duplicate.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214510160503F200F18538 /* Tool Node Duplicate.png */; };
-		262145B4160508A700F18538 /* Tool Node Link.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214511160503F200F18538 /* Tool Node Link.png */; };
-		262145B5160508A700F18538 /* Tool Node Remove Link.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214512160503F200F18538 /* Tool Node Remove Link.png */; };
-		262145B6160508A700F18538 /* Tool Node Select.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214513160503F200F18538 /* Tool Node Select.png */; };
-		262145B7160508A700F18538 /* Tool Node.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214514160503F200F18538 /* Tool Node.png */; };
-		262145B8160508A700F18538 /* Tool Normals.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214515160503F200F18538 /* Tool Normals.png */; };
-		262145B9160508A700F18538 /* Tool Particle.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214516160503F200F18538 /* Tool Particle.png */; };
-		262145BA160508A700F18538 /* Tool Polygon.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214517160503F200F18538 /* Tool Polygon.png */; };
-		262145BB160508A700F18538 /* Tool Rotate Mode.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214518160503F200F18538 /* Tool Rotate Mode.png */; };
-		262145BC160508A700F18538 /* Tool Run Map.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214519160503F200F18538 /* Tool Run Map.png */; };
-		262145BD160508A700F18538 /* Tool Scenery.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621451A160503F200F18538 /* Tool Scenery.png */; };
-		262145BE160508A700F18538 /* Tool Small Grid.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621451B160503F200F18538 /* Tool Small Grid.png */; };
-		262145BF160508A700F18538 /* Tool Snap Points.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621451C160503F200F18538 /* Tool Snap Points.png */; };
-		262145C0160508A700F18538 /* Tool Sound.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621451D160503F200F18538 /* Tool Sound.png */; };
-		262145C1160508A700F18538 /* Tool Split Mesh.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621451E160503F200F18538 /* Tool Split Mesh.png */; };
-		262145C2160508A700F18538 /* Tool Spot.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 2621451F160503F200F18538 /* Tool Spot.png */; };
-		262145C3160508A700F18538 /* Tool Tesselate Mesh.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214520160503F200F18538 /* Tool Tesselate Mesh.png */; };
-		262145C4160508A700F18538 /* Tool Toggle Mode.png in Copy Map Tools */ = {isa = PBXBuildFile; fileRef = 26214521160503F200F18538 /* Tool Toggle Mode.png */; };
-		262145C5160508B400F18538 /* Tool Bones.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214523160503F200F18538 /* Tool Bones.png */; };
-		262145C6160508B400F18538 /* Tool Boxes.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214524160503F200F18538 /* Tool Boxes.png */; };
-		262145C7160508B400F18538 /* Tool Edit Mesh.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214525160503F200F18538 /* Tool Edit Mesh.png */; };
-		262145C8160508B400F18538 /* Tool Edit Polygons.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214526160503F200F18538 /* Tool Edit Polygons.png */; };
-		262145C9160508B400F18538 /* Tool Edit Vertexes.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214527160503F200F18538 /* Tool Edit Vertexes.png */; };
-		262145CA160508B400F18538 /* Tool Hit Boxes.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214528160503F200F18538 /* Tool Hit Boxes.png */; };
-		262145CB160508B400F18538 /* Tool Mesh.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214529160503F200F18538 /* Tool Mesh.png */; };
-		262145CC160508B400F18538 /* Tool Move Mode.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 2621452A160503F200F18538 /* Tool Move Mode.png */; };
-		262145CD160508B400F18538 /* Tool Normals.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 2621452B160503F200F18538 /* Tool Normals.png */; };
-		262145CE160508B400F18538 /* Tool Play Blend.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 2621452C160503F200F18538 /* Tool Play Blend.png */; };
-		262145CF160508B400F18538 /* Tool Play Next.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 2621452D160503F200F18538 /* Tool Play Next.png */; };
-		262145D0160508B400F18538 /* Tool Play Previous.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 2621452E160503F200F18538 /* Tool Play Previous.png */; };
-		262145D1160508B400F18538 /* Tool Play Slow.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 2621452F160503F200F18538 /* Tool Play Slow.png */; };
-		262145D2160508B400F18538 /* Tool Play Stop.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214530160503F200F18538 /* Tool Play Stop.png */; };
-		262145D3160508B400F18538 /* Tool Play.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214531160503F200F18538 /* Tool Play.png */; };
-		262145D4160508B400F18538 /* Tool Rotate Mode.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214532160503F200F18538 /* Tool Rotate Mode.png */; };
-		262145D5160508B400F18538 /* Tool Select Vertex With Bone.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214533160503F200F18538 /* Tool Select Vertex With Bone.png */; };
-		262145D6160508B400F18538 /* Tool Show Bone Names.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214534160503F200F18538 /* Tool Show Bone Names.png */; };
-		262145D7160508B400F18538 /* Tool Show First Mesh.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214535160503F200F18538 /* Tool Show First Mesh.png */; };
-		262145D8160508B400F18538 /* Tool Textured.png in Copy Model Tools */ = {isa = PBXBuildFile; fileRef = 26214536160503F200F18538 /* Tool Textured.png */; };
-		2621462616050A0E00F18538 /* light.png in Copy Item Icons */ = {isa = PBXBuildFile; fileRef = 262145801605040300F18538 /* light.png */; };
-		2621462716050A3F00F18538 /* node.png in Copy Item Icons */ = {isa = PBXBuildFile; fileRef = 262145811605040300F18538 /* node.png */; };
-		2621462816050A4100F18538 /* node_defined.png in Copy Item Icons */ = {isa = PBXBuildFile; fileRef = 262145821605040300F18538 /* node_defined.png */; };
-		2621462916050A4800F18538 /* particle.png in Copy Item Icons */ = {isa = PBXBuildFile; fileRef = 262145831605040300F18538 /* particle.png */; };
-		2621462A16050A4B00F18538 /* scenery.png in Copy Item Icons */ = {isa = PBXBuildFile; fileRef = 262145841605040300F18538 /* scenery.png */; };
-		2621462B16050A4E00F18538 /* sound.png in Copy Item Icons */ = {isa = PBXBuildFile; fileRef = 262145851605040300F18538 /* sound.png */; };
-		2621462C16050A5100F18538 /* spot.png in Copy Item Icons */ = {isa = PBXBuildFile; fileRef = 262145861605040300F18538 /* spot.png */; };
 		2653251F160149DF00061FB8 /* main_app.c in Sources */ = {isa = PBXBuildFile; fileRef = 2653251D160149DF00061FB8 /* main_app.c */; };
 		26532520160149DF00061FB8 /* main_window.c in Sources */ = {isa = PBXBuildFile; fileRef = 2653251E160149DF00061FB8 /* main_window.c */; };
 		2653B1C6198F436E008C40E4 /* map_auto_generate_connect.c in Sources */ = {isa = PBXBuildFile; fileRef = 2653B1BF198F436E008C40E4 /* map_auto_generate_connect.c */; };
@@ -178,9 +108,6 @@
 		26C1DFF9160044CF007FDAC7 /* model_util_size.c in Sources */ = {isa = PBXBuildFile; fileRef = 26C1DFE3160044CF007FDAC7 /* model_util_size.c */; };
 		26C1DFFA160044CF007FDAC7 /* model_util_texture.c in Sources */ = {isa = PBXBuildFile; fileRef = 26C1DFE4160044CF007FDAC7 /* model_util_texture.c */; };
 		26C1DFFB160044CF007FDAC7 /* model_util_transform.c in Sources */ = {isa = PBXBuildFile; fileRef = 26C1DFE5160044CF007FDAC7 /* model_util_transform.c */; };
-		26C25375161FFA6000A6E809 /* Up.png in Copy List Icons */ = {isa = PBXBuildFile; fileRef = 26C25370161FFA4700A6E809 /* Up.png */; };
-		26C25376161FFA6300A6E809 /* Down.png in Copy List Icons */ = {isa = PBXBuildFile; fileRef = 26C25373161FFA4B00A6E809 /* Down.png */; };
-		26C2CB8D1606B427004B25A8 /* dim3 Editor.icns in Resources */ = {isa = PBXBuildFile; fileRef = 26C2CB8C1606B427004B25A8 /* dim3 Editor.icns */; };
 		26CD14ED1949695E00C4F868 /* base_ag_bitmap.c in Sources */ = {isa = PBXBuildFile; fileRef = 26CD14EC1949695E00C4F868 /* base_ag_bitmap.c */; };
 		26E4021714F4721D0059C798 /* libPNG.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 26E4021514F4721D0059C798 /* libPNG.a */; };
 		26E4022714F4B3ED0059C798 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26E4022614F4B3ED0059C798 /* Foundation.framework */; };
@@ -350,131 +277,11 @@
 		26F7E1971600472C00E739C4 /* project_menu.c in Sources */ = {isa = PBXBuildFile; fileRef = 26F7E1941600472C00E739C4 /* project_menu.c */; };
 		26F7EE0919A1BC3E006DD077 /* model_auto_generate_bone.c in Sources */ = {isa = PBXBuildFile; fileRef = 26F7EE0719A1BC3E006DD077 /* model_auto_generate_bone.c */; };
 		26F7EE0A19A1BC3E006DD077 /* model_auto_generate_decorations.c in Sources */ = {isa = PBXBuildFile; fileRef = 26F7EE0819A1BC3E006DD077 /* model_auto_generate_decorations.c */; };
+		55EECBCD21D6F35500F70D5D /* Media.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 55EECBCC21D6F35500F70D5D /* Media.xcassets */; };
+		55EECBCF21D6F72B00F70D5D /* model_auto_generate_pieces.c in Sources */ = {isa = PBXBuildFile; fileRef = 55EECBCE21D6F72A00F70D5D /* model_auto_generate_pieces.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		2621458E1605045B00F18538 /* Copy Item Icons */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = Items;
-			dstSubfolderSpec = 7;
-			files = (
-				2621462616050A0E00F18538 /* light.png in Copy Item Icons */,
-				2621462716050A3F00F18538 /* node.png in Copy Item Icons */,
-				2621462816050A4100F18538 /* node_defined.png in Copy Item Icons */,
-				2621462916050A4800F18538 /* particle.png in Copy Item Icons */,
-				2621462A16050A4B00F18538 /* scenery.png in Copy Item Icons */,
-				2621462B16050A4E00F18538 /* sound.png in Copy Item Icons */,
-				2621462C16050A5100F18538 /* spot.png in Copy Item Icons */,
-			);
-			name = "Copy Item Icons";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		2621458F1605046E00F18538 /* Copy List Icons */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = Lists;
-			dstSubfolderSpec = 7;
-			files = (
-				2621459A1605086A00F18538 /* Back.png in Copy List Icons */,
-				2621459B1605086A00F18538 /* Edit.png in Copy List Icons */,
-				2621459C1605086A00F18538 /* Minus.png in Copy List Icons */,
-				2621459D1605086A00F18538 /* Plus.png in Copy List Icons */,
-				2621459E1605086A00F18538 /* Set.png in Copy List Icons */,
-				26C25375161FFA6000A6E809 /* Up.png in Copy List Icons */,
-				26C25376161FFA6300A6E809 /* Down.png in Copy List Icons */,
-			);
-			name = "Copy List Icons";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		262145901605047B00F18538 /* Copy Project Tools */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = Tools/Project;
-			dstSubfolderSpec = 7;
-			files = (
-				2621459F1605087F00F18538 /* Tool Run Project.png in Copy Project Tools */,
-			);
-			name = "Copy Project Tools";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		262145911605048500F18538 /* Copy Map Tools */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = Tools/Map;
-			dstSubfolderSpec = 7;
-			files = (
-				262145A0160508A700F18538 /* Tool Auto-Texture Mesh.png in Copy Map Tools */,
-				262145A1160508A700F18538 /* Tool Combine Meshes.png in Copy Map Tools */,
-				262145A2160508A700F18538 /* Tool Cull.png in Copy Map Tools */,
-				262145A3160508A700F18538 /* Tool Edit Map Script.png in Copy Map Tools */,
-				262145A4160508A700F18538 /* Tool Edit Mesh.png in Copy Map Tools */,
-				262145A5160508A700F18538 /* Tool Edit Polygons.png in Copy Map Tools */,
-				262145A6160508A700F18538 /* Tool Edit Vertexes.png in Copy Map Tools */,
-				262145A7160508A700F18538 /* Tool Free Look.png in Copy Map Tools */,
-				262145A8160508A700F18538 /* Tool Grid.png in Copy Map Tools */,
-				262145A9160508A700F18538 /* Tool Height Map.png in Copy Map Tools */,
-				262145AA160508A700F18538 /* Tool Large Grid.png in Copy Map Tools */,
-				262145AB160508A700F18538 /* Tool Light.png in Copy Map Tools */,
-				262145AC160508A700F18538 /* Tool Liquid.png in Copy Map Tools */,
-				262145AD160508A700F18538 /* Tool Mesh UV.png in Copy Map Tools */,
-				262145AE160508A700F18538 /* Tool Mesh.png in Copy Map Tools */,
-				262145AF160508A700F18538 /* Tool Move Mode.png in Copy Map Tools */,
-				262145B0160508A700F18538 /* Tool Move Points Together.png in Copy Map Tools */,
-				262145B1160508A700F18538 /* Tool Move Points.png in Copy Map Tools */,
-				262145B2160508A700F18538 /* Tool No Grid.png in Copy Map Tools */,
-				262145B3160508A700F18538 /* Tool Node Duplicate.png in Copy Map Tools */,
-				262145B4160508A700F18538 /* Tool Node Link.png in Copy Map Tools */,
-				262145B5160508A700F18538 /* Tool Node Remove Link.png in Copy Map Tools */,
-				262145B6160508A700F18538 /* Tool Node Select.png in Copy Map Tools */,
-				262145B7160508A700F18538 /* Tool Node.png in Copy Map Tools */,
-				262145B8160508A700F18538 /* Tool Normals.png in Copy Map Tools */,
-				262145B9160508A700F18538 /* Tool Particle.png in Copy Map Tools */,
-				262145BA160508A700F18538 /* Tool Polygon.png in Copy Map Tools */,
-				262145BB160508A700F18538 /* Tool Rotate Mode.png in Copy Map Tools */,
-				262145BC160508A700F18538 /* Tool Run Map.png in Copy Map Tools */,
-				262145BD160508A700F18538 /* Tool Scenery.png in Copy Map Tools */,
-				262145BE160508A700F18538 /* Tool Small Grid.png in Copy Map Tools */,
-				262145BF160508A700F18538 /* Tool Snap Points.png in Copy Map Tools */,
-				262145C0160508A700F18538 /* Tool Sound.png in Copy Map Tools */,
-				262145C1160508A700F18538 /* Tool Split Mesh.png in Copy Map Tools */,
-				262145C2160508A700F18538 /* Tool Spot.png in Copy Map Tools */,
-				262145C3160508A700F18538 /* Tool Tesselate Mesh.png in Copy Map Tools */,
-				262145C4160508A700F18538 /* Tool Toggle Mode.png in Copy Map Tools */,
-			);
-			name = "Copy Map Tools";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		262145921605049000F18538 /* Copy Model Tools */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = Tools/Model;
-			dstSubfolderSpec = 7;
-			files = (
-				262145C5160508B400F18538 /* Tool Bones.png in Copy Model Tools */,
-				262145C6160508B400F18538 /* Tool Boxes.png in Copy Model Tools */,
-				262145C7160508B400F18538 /* Tool Edit Mesh.png in Copy Model Tools */,
-				262145C8160508B400F18538 /* Tool Edit Polygons.png in Copy Model Tools */,
-				262145C9160508B400F18538 /* Tool Edit Vertexes.png in Copy Model Tools */,
-				262145CA160508B400F18538 /* Tool Hit Boxes.png in Copy Model Tools */,
-				262145CB160508B400F18538 /* Tool Mesh.png in Copy Model Tools */,
-				262145CC160508B400F18538 /* Tool Move Mode.png in Copy Model Tools */,
-				262145CD160508B400F18538 /* Tool Normals.png in Copy Model Tools */,
-				262145CE160508B400F18538 /* Tool Play Blend.png in Copy Model Tools */,
-				262145CF160508B400F18538 /* Tool Play Next.png in Copy Model Tools */,
-				262145D0160508B400F18538 /* Tool Play Previous.png in Copy Model Tools */,
-				262145D1160508B400F18538 /* Tool Play Slow.png in Copy Model Tools */,
-				262145D2160508B400F18538 /* Tool Play Stop.png in Copy Model Tools */,
-				262145D3160508B400F18538 /* Tool Play.png in Copy Model Tools */,
-				262145D4160508B400F18538 /* Tool Rotate Mode.png in Copy Model Tools */,
-				262145D5160508B400F18538 /* Tool Select Vertex With Bone.png in Copy Model Tools */,
-				262145D6160508B400F18538 /* Tool Show Bone Names.png in Copy Model Tools */,
-				262145D7160508B400F18538 /* Tool Show First Mesh.png in Copy Model Tools */,
-				262145D8160508B400F18538 /* Tool Textured.png in Copy Model Tools */,
-			);
-			name = "Copy Model Tools";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		265A630C150B286D0063EEDD /* Copy Application */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -493,97 +300,27 @@
 		26159D2516D1AA6C0069B442 /* project_palette_label.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = project_palette_label.c; path = Sources/palettes/project/project_palette_label.c; sourceTree = "<group>"; };
 		26159D2616D1AA6D0069B442 /* project_palette_labels.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = project_palette_labels.c; path = Sources/palettes/project/project_palette_labels.c; sourceTree = "<group>"; };
 		2620AFD61682B68E00A3C76F /* map_view_auto_generator.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_view_auto_generator.c; path = Sources/code/map/map_view_auto_generator.c; sourceTree = "<group>"; };
-		262144FD160503F200F18538 /* Tool Auto-Texture Mesh.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Auto-Texture Mesh.png"; sourceTree = "<group>"; };
-		262144FE160503F200F18538 /* Tool Combine Meshes.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Combine Meshes.png"; sourceTree = "<group>"; };
-		262144FF160503F200F18538 /* Tool Cull.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Cull.png"; sourceTree = "<group>"; };
-		26214500160503F200F18538 /* Tool Edit Map Script.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Edit Map Script.png"; sourceTree = "<group>"; };
-		26214501160503F200F18538 /* Tool Edit Mesh.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Edit Mesh.png"; sourceTree = "<group>"; };
-		26214502160503F200F18538 /* Tool Edit Polygons.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Edit Polygons.png"; sourceTree = "<group>"; };
-		26214503160503F200F18538 /* Tool Edit Vertexes.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Edit Vertexes.png"; sourceTree = "<group>"; };
-		26214504160503F200F18538 /* Tool Free Look.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Free Look.png"; sourceTree = "<group>"; };
-		26214505160503F200F18538 /* Tool Grid.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Grid.png"; sourceTree = "<group>"; };
-		26214506160503F200F18538 /* Tool Height Map.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Height Map.png"; sourceTree = "<group>"; };
-		26214507160503F200F18538 /* Tool Large Grid.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Large Grid.png"; sourceTree = "<group>"; };
-		26214508160503F200F18538 /* Tool Light.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Light.png"; sourceTree = "<group>"; };
-		26214509160503F200F18538 /* Tool Liquid.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Liquid.png"; sourceTree = "<group>"; };
-		2621450A160503F200F18538 /* Tool Mesh UV.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Mesh UV.png"; sourceTree = "<group>"; };
-		2621450B160503F200F18538 /* Tool Mesh.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Mesh.png"; sourceTree = "<group>"; };
-		2621450C160503F200F18538 /* Tool Move Mode.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Move Mode.png"; sourceTree = "<group>"; };
-		2621450D160503F200F18538 /* Tool Move Points Together.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Move Points Together.png"; sourceTree = "<group>"; };
-		2621450E160503F200F18538 /* Tool Move Points.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Move Points.png"; sourceTree = "<group>"; };
-		2621450F160503F200F18538 /* Tool No Grid.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool No Grid.png"; sourceTree = "<group>"; };
-		26214510160503F200F18538 /* Tool Node Duplicate.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Node Duplicate.png"; sourceTree = "<group>"; };
-		26214511160503F200F18538 /* Tool Node Link.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Node Link.png"; sourceTree = "<group>"; };
-		26214512160503F200F18538 /* Tool Node Remove Link.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Node Remove Link.png"; sourceTree = "<group>"; };
-		26214513160503F200F18538 /* Tool Node Select.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Node Select.png"; sourceTree = "<group>"; };
-		26214514160503F200F18538 /* Tool Node.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Node.png"; sourceTree = "<group>"; };
-		26214515160503F200F18538 /* Tool Normals.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Normals.png"; sourceTree = "<group>"; };
-		26214516160503F200F18538 /* Tool Particle.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Particle.png"; sourceTree = "<group>"; };
-		26214517160503F200F18538 /* Tool Polygon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Polygon.png"; sourceTree = "<group>"; };
-		26214518160503F200F18538 /* Tool Rotate Mode.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Rotate Mode.png"; sourceTree = "<group>"; };
-		26214519160503F200F18538 /* Tool Run Map.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Run Map.png"; sourceTree = "<group>"; };
-		2621451A160503F200F18538 /* Tool Scenery.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Scenery.png"; sourceTree = "<group>"; };
-		2621451B160503F200F18538 /* Tool Small Grid.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Small Grid.png"; sourceTree = "<group>"; };
-		2621451C160503F200F18538 /* Tool Snap Points.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Snap Points.png"; sourceTree = "<group>"; };
-		2621451D160503F200F18538 /* Tool Sound.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Sound.png"; sourceTree = "<group>"; };
-		2621451E160503F200F18538 /* Tool Split Mesh.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Split Mesh.png"; sourceTree = "<group>"; };
-		2621451F160503F200F18538 /* Tool Spot.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Spot.png"; sourceTree = "<group>"; };
-		26214520160503F200F18538 /* Tool Tesselate Mesh.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Tesselate Mesh.png"; sourceTree = "<group>"; };
-		26214521160503F200F18538 /* Tool Toggle Mode.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Toggle Mode.png"; sourceTree = "<group>"; };
-		26214523160503F200F18538 /* Tool Bones.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Bones.png"; sourceTree = "<group>"; };
-		26214524160503F200F18538 /* Tool Boxes.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Boxes.png"; sourceTree = "<group>"; };
-		26214525160503F200F18538 /* Tool Edit Mesh.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Edit Mesh.png"; sourceTree = "<group>"; };
-		26214526160503F200F18538 /* Tool Edit Polygons.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Edit Polygons.png"; sourceTree = "<group>"; };
-		26214527160503F200F18538 /* Tool Edit Vertexes.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Edit Vertexes.png"; sourceTree = "<group>"; };
-		26214528160503F200F18538 /* Tool Hit Boxes.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Hit Boxes.png"; sourceTree = "<group>"; };
-		26214529160503F200F18538 /* Tool Mesh.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Mesh.png"; sourceTree = "<group>"; };
-		2621452A160503F200F18538 /* Tool Move Mode.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Move Mode.png"; sourceTree = "<group>"; };
-		2621452B160503F200F18538 /* Tool Normals.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Normals.png"; sourceTree = "<group>"; };
-		2621452C160503F200F18538 /* Tool Play Blend.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Play Blend.png"; sourceTree = "<group>"; };
-		2621452D160503F200F18538 /* Tool Play Next.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Play Next.png"; sourceTree = "<group>"; };
-		2621452E160503F200F18538 /* Tool Play Previous.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Play Previous.png"; sourceTree = "<group>"; };
-		2621452F160503F200F18538 /* Tool Play Slow.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Play Slow.png"; sourceTree = "<group>"; };
-		26214530160503F200F18538 /* Tool Play Stop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Play Stop.png"; sourceTree = "<group>"; };
-		26214531160503F200F18538 /* Tool Play.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Play.png"; sourceTree = "<group>"; };
-		26214532160503F200F18538 /* Tool Rotate Mode.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Rotate Mode.png"; sourceTree = "<group>"; };
-		26214533160503F200F18538 /* Tool Select Vertex With Bone.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Select Vertex With Bone.png"; sourceTree = "<group>"; };
-		26214534160503F200F18538 /* Tool Show Bone Names.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Show Bone Names.png"; sourceTree = "<group>"; };
-		26214535160503F200F18538 /* Tool Show First Mesh.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Show First Mesh.png"; sourceTree = "<group>"; };
-		26214536160503F200F18538 /* Tool Textured.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Textured.png"; sourceTree = "<group>"; };
-		26214538160503F200F18538 /* Tool Run Project.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Tool Run Project.png"; sourceTree = "<group>"; };
-		26214575160503FA00F18538 /* Back.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Back.png; sourceTree = "<group>"; };
-		26214576160503FA00F18538 /* Edit.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Edit.png; sourceTree = "<group>"; };
-		26214577160503FA00F18538 /* Minus.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Minus.png; sourceTree = "<group>"; };
-		26214578160503FA00F18538 /* Plus.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Plus.png; sourceTree = "<group>"; };
-		26214579160503FA00F18538 /* Set.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Set.png; sourceTree = "<group>"; };
-		262145801605040300F18538 /* light.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = light.png; sourceTree = "<group>"; };
-		262145811605040300F18538 /* node.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = node.png; sourceTree = "<group>"; };
-		262145821605040300F18538 /* node_defined.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = node_defined.png; sourceTree = "<group>"; };
-		262145831605040300F18538 /* particle.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = particle.png; sourceTree = "<group>"; };
-		262145841605040300F18538 /* scenery.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = scenery.png; sourceTree = "<group>"; };
-		262145851605040300F18538 /* sound.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = sound.png; sourceTree = "<group>"; };
-		262145861605040300F18538 /* spot.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = spot.png; sourceTree = "<group>"; };
 		2653251D160149DF00061FB8 /* main_app.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = main_app.c; path = Sources/windows/main_app.c; sourceTree = "<group>"; };
 		2653251E160149DF00061FB8 /* main_window.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = main_window.c; path = Sources/windows/main_window.c; sourceTree = "<group>"; };
-		2653B1BB198F435B008C40E4 /* autogeneratemapprivate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = autogeneratemapprivate.h; path = ../../dim3AutoGenerate/Headers/autogeneratemapprivate.h; sourceTree = "<group>"; };
-		2653B1BC198F435B008C40E4 /* autogeneratemodelprivate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = autogeneratemodelprivate.h; path = ../../dim3AutoGenerate/Headers/autogeneratemodelprivate.h; sourceTree = "<group>"; };
-		2653B1BD198F435B008C40E4 /* autogenerateutility.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = autogenerateutility.h; path = ../../dim3AutoGenerate/Headers/autogenerateutility.h; sourceTree = "<group>"; };
-		2653B1BE198F435B008C40E4 /* dim3autogenerate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = dim3autogenerate.h; path = ../../dim3AutoGenerate/Headers/dim3autogenerate.h; sourceTree = "<group>"; };
-		2653B1BF198F436E008C40E4 /* map_auto_generate_connect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_auto_generate_connect.c; path = ../../dim3AutoGenerate/Sources/map/map_auto_generate_connect.c; sourceTree = "<group>"; };
-		2653B1C0198F436E008C40E4 /* map_auto_generate_decoration.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_auto_generate_decoration.c; path = ../../dim3AutoGenerate/Sources/map/map_auto_generate_decoration.c; sourceTree = "<group>"; };
-		2653B1C1198F436E008C40E4 /* map_auto_generate_primitive.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_auto_generate_primitive.c; path = ../../dim3AutoGenerate/Sources/map/map_auto_generate_primitive.c; sourceTree = "<group>"; };
-		2653B1C2198F436E008C40E4 /* map_auto_generate_setup.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_auto_generate_setup.c; path = ../../dim3AutoGenerate/Sources/map/map_auto_generate_setup.c; sourceTree = "<group>"; };
-		2653B1C3198F436E008C40E4 /* map_auto_generate_story.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_auto_generate_story.c; path = ../../dim3AutoGenerate/Sources/map/map_auto_generate_story.c; sourceTree = "<group>"; };
-		2653B1C4198F436E008C40E4 /* map_auto_generate_utility.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_auto_generate_utility.c; path = ../../dim3AutoGenerate/Sources/map/map_auto_generate_utility.c; sourceTree = "<group>"; };
-		2653B1C5198F436E008C40E4 /* map_auto_generate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_auto_generate.c; path = ../../dim3AutoGenerate/Sources/map/map_auto_generate.c; sourceTree = "<group>"; };
+		2653B1BB198F435B008C40E4 /* autogeneratemapprivate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = autogeneratemapprivate.h; sourceTree = "<group>"; };
+		2653B1BC198F435B008C40E4 /* autogeneratemodelprivate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = autogeneratemodelprivate.h; sourceTree = "<group>"; };
+		2653B1BD198F435B008C40E4 /* autogenerateutility.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = autogenerateutility.h; sourceTree = "<group>"; };
+		2653B1BE198F435B008C40E4 /* dim3autogenerate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dim3autogenerate.h; sourceTree = "<group>"; };
+		2653B1BF198F436E008C40E4 /* map_auto_generate_connect.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = map_auto_generate_connect.c; sourceTree = "<group>"; };
+		2653B1C0198F436E008C40E4 /* map_auto_generate_decoration.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = map_auto_generate_decoration.c; sourceTree = "<group>"; };
+		2653B1C1198F436E008C40E4 /* map_auto_generate_primitive.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = map_auto_generate_primitive.c; sourceTree = "<group>"; };
+		2653B1C2198F436E008C40E4 /* map_auto_generate_setup.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = map_auto_generate_setup.c; sourceTree = "<group>"; };
+		2653B1C3198F436E008C40E4 /* map_auto_generate_story.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = map_auto_generate_story.c; sourceTree = "<group>"; };
+		2653B1C4198F436E008C40E4 /* map_auto_generate_utility.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = map_auto_generate_utility.c; sourceTree = "<group>"; };
+		2653B1C5198F436E008C40E4 /* map_auto_generate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = map_auto_generate.c; sourceTree = "<group>"; };
 		2653B6D0160D76A300EE0CD7 /* DialogOutlineDataSource.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DialogOutlineDataSource.h; path = dim3Editor/DialogOutlineDataSource.h; sourceTree = SOURCE_ROOT; };
 		2653B6D1160D76A300EE0CD7 /* DialogOutlineDataSource.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = DialogOutlineDataSource.m; path = dim3Editor/DialogOutlineDataSource.m; sourceTree = SOURCE_ROOT; };
-		2658268F14F31CE200245C24 /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.6.sdk/System/Library/Frameworks/OpenGL.framework; sourceTree = DEVELOPER_DIR; };
+		2658268F14F31CE200245C24 /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
 		265AB41715FEEE99005CDBB0 /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AppDelegate.h; path = dim3Editor/AppDelegate.h; sourceTree = SOURCE_ROOT; };
 		265AB41815FEEE99005CDBB0 /* AppDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = AppDelegate.m; path = dim3Editor/AppDelegate.m; sourceTree = SOURCE_ROOT; };
 		265AB41915FEEE99005CDBB0 /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = dim3Editor/main.m; sourceTree = SOURCE_ROOT; };
 		265AB42015FEEED9005CDBB0 /* OSX_glue.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = OSX_glue.m; path = dim3Editor/OSX_glue.m; sourceTree = SOURCE_ROOT; };
-		265AB42715FEEF39005CDBB0 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = dim3Editor/en.lproj/InfoPlist.strings; sourceTree = SOURCE_ROOT; };
+		265AB42715FEEF39005CDBB0 /* en */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.strings; name = en; path = dim3Editor/en.lproj/InfoPlist.strings; sourceTree = SOURCE_ROOT; };
 		265AB42A15FEEF3E005CDBB0 /* en */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = en; path = dim3Editor/en.lproj/MainMenu.xib; sourceTree = SOURCE_ROOT; };
 		266E2B9816096FE400CE6147 /* mac_os_defs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = mac_os_defs.h; path = ../OSXBuild/Common/Headers/mac_os_defs.h; sourceTree = "<group>"; };
 		26900AD014F2044F008026D5 /* dim3 Editor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "dim3 Editor.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -652,45 +389,43 @@
 		26C1DFBA1600449C007FDAC7 /* map_util_spots.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_util_spots.c; path = Sources/map_util_spots.c; sourceTree = "<group>"; };
 		26C1DFBB1600449C007FDAC7 /* map_util_texture.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_util_texture.c; path = Sources/map_util_texture.c; sourceTree = "<group>"; };
 		26C1DFBC1600449C007FDAC7 /* map_util_write.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_util_write.c; path = Sources/map_util_write.c; sourceTree = "<group>"; };
-		26C1DFCD160044C3007FDAC7 /* dim3modelutility.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = dim3modelutility.h; path = Headers/dim3modelutility.h; sourceTree = "<group>"; };
-		26C1DFCE160044C3007FDAC7 /* modelprivate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = modelprivate.h; path = Headers/modelprivate.h; sourceTree = "<group>"; };
-		26C1DFCF160044C3007FDAC7 /* modelutility.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = modelutility.h; path = Headers/modelutility.h; sourceTree = "<group>"; };
-		26C1DFD0160044CF007FDAC7 /* model_util_animation.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_animation.c; path = Sources/model_util_animation.c; sourceTree = "<group>"; };
-		26C1DFD1160044CF007FDAC7 /* model_util_bone.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_bone.c; path = Sources/model_util_bone.c; sourceTree = "<group>"; };
-		26C1DFD2160044CF007FDAC7 /* model_util_calculate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_calculate.c; path = Sources/model_util_calculate.c; sourceTree = "<group>"; };
-		26C1DFD3160044CF007FDAC7 /* model_util_draw_bones.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_draw_bones.c; path = Sources/model_util_draw_bones.c; sourceTree = "<group>"; };
-		26C1DFD4160044CF007FDAC7 /* model_util_draw_normals.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_draw_normals.c; path = Sources/model_util_draw_normals.c; sourceTree = "<group>"; };
-		26C1DFD5160044CF007FDAC7 /* model_util_draw_setup.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_draw_setup.c; path = Sources/model_util_draw_setup.c; sourceTree = "<group>"; };
-		26C1DFD6160044CF007FDAC7 /* model_util_draw_vertexes.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_draw_vertexes.c; path = Sources/model_util_draw_vertexes.c; sourceTree = "<group>"; };
-		26C1DFD7160044CF007FDAC7 /* model_util_file_animate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_file_animate.c; path = Sources/model_util_file_animate.c; sourceTree = "<group>"; };
-		26C1DFD8160044CF007FDAC7 /* model_util_file_mesh.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_file_mesh.c; path = Sources/model_util_file_mesh.c; sourceTree = "<group>"; };
-		26C1DFD9160044CF007FDAC7 /* model_util_file_model.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_file_model.c; path = Sources/model_util_file_model.c; sourceTree = "<group>"; };
-		26C1DFDA160044CF007FDAC7 /* model_util_file_pose.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_file_pose.c; path = Sources/model_util_file_pose.c; sourceTree = "<group>"; };
-		26C1DFDB160044CF007FDAC7 /* model_util_frames.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_frames.c; path = Sources/model_util_frames.c; sourceTree = "<group>"; };
-		26C1DFDC160044CF007FDAC7 /* model_util_hit_box.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_hit_box.c; path = Sources/model_util_hit_box.c; sourceTree = "<group>"; };
-		26C1DFDD160044CF007FDAC7 /* model_util_lookup.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_lookup.c; path = Sources/model_util_lookup.c; sourceTree = "<group>"; };
-		26C1DFDE160044CF007FDAC7 /* model_util_main.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_main.c; path = Sources/model_util_main.c; sourceTree = "<group>"; };
-		26C1DFDF160044CF007FDAC7 /* model_util_mesh.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_mesh.c; path = Sources/model_util_mesh.c; sourceTree = "<group>"; };
-		26C1DFE0160044CF007FDAC7 /* model_util_normals.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_normals.c; path = Sources/model_util_normals.c; sourceTree = "<group>"; };
-		26C1DFE1160044CF007FDAC7 /* model_util_pose.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_pose.c; path = Sources/model_util_pose.c; sourceTree = "<group>"; };
-		26C1DFE2160044CF007FDAC7 /* model_util_positions.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_positions.c; path = Sources/model_util_positions.c; sourceTree = "<group>"; };
-		26C1DFE3160044CF007FDAC7 /* model_util_size.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_size.c; path = Sources/model_util_size.c; sourceTree = "<group>"; };
-		26C1DFE4160044CF007FDAC7 /* model_util_texture.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_texture.c; path = Sources/model_util_texture.c; sourceTree = "<group>"; };
-		26C1DFE5160044CF007FDAC7 /* model_util_transform.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_util_transform.c; path = Sources/model_util_transform.c; sourceTree = "<group>"; };
-		26C25370161FFA4700A6E809 /* Up.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Up.png; sourceTree = "<group>"; };
-		26C25373161FFA4B00A6E809 /* Down.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Down.png; sourceTree = "<group>"; };
+		26C1DFCD160044C3007FDAC7 /* dim3modelutility.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dim3modelutility.h; sourceTree = "<group>"; };
+		26C1DFCE160044C3007FDAC7 /* modelprivate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = modelprivate.h; sourceTree = "<group>"; };
+		26C1DFCF160044C3007FDAC7 /* modelutility.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = modelutility.h; sourceTree = "<group>"; };
+		26C1DFD0160044CF007FDAC7 /* model_util_animation.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_animation.c; sourceTree = "<group>"; };
+		26C1DFD1160044CF007FDAC7 /* model_util_bone.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_bone.c; sourceTree = "<group>"; };
+		26C1DFD2160044CF007FDAC7 /* model_util_calculate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_calculate.c; sourceTree = "<group>"; };
+		26C1DFD3160044CF007FDAC7 /* model_util_draw_bones.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_draw_bones.c; sourceTree = "<group>"; };
+		26C1DFD4160044CF007FDAC7 /* model_util_draw_normals.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_draw_normals.c; sourceTree = "<group>"; };
+		26C1DFD5160044CF007FDAC7 /* model_util_draw_setup.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_draw_setup.c; sourceTree = "<group>"; };
+		26C1DFD6160044CF007FDAC7 /* model_util_draw_vertexes.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_draw_vertexes.c; sourceTree = "<group>"; };
+		26C1DFD7160044CF007FDAC7 /* model_util_file_animate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_file_animate.c; sourceTree = "<group>"; };
+		26C1DFD8160044CF007FDAC7 /* model_util_file_mesh.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_file_mesh.c; sourceTree = "<group>"; };
+		26C1DFD9160044CF007FDAC7 /* model_util_file_model.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_file_model.c; sourceTree = "<group>"; };
+		26C1DFDA160044CF007FDAC7 /* model_util_file_pose.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_file_pose.c; sourceTree = "<group>"; };
+		26C1DFDB160044CF007FDAC7 /* model_util_frames.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_frames.c; sourceTree = "<group>"; };
+		26C1DFDC160044CF007FDAC7 /* model_util_hit_box.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_hit_box.c; sourceTree = "<group>"; };
+		26C1DFDD160044CF007FDAC7 /* model_util_lookup.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_lookup.c; sourceTree = "<group>"; };
+		26C1DFDE160044CF007FDAC7 /* model_util_main.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_main.c; sourceTree = "<group>"; };
+		26C1DFDF160044CF007FDAC7 /* model_util_mesh.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_mesh.c; sourceTree = "<group>"; };
+		26C1DFE0160044CF007FDAC7 /* model_util_normals.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_normals.c; sourceTree = "<group>"; };
+		26C1DFE1160044CF007FDAC7 /* model_util_pose.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_pose.c; sourceTree = "<group>"; };
+		26C1DFE2160044CF007FDAC7 /* model_util_positions.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_positions.c; sourceTree = "<group>"; };
+		26C1DFE3160044CF007FDAC7 /* model_util_size.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_size.c; sourceTree = "<group>"; };
+		26C1DFE4160044CF007FDAC7 /* model_util_texture.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_texture.c; sourceTree = "<group>"; };
+		26C1DFE5160044CF007FDAC7 /* model_util_transform.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_util_transform.c; sourceTree = "<group>"; };
 		26C2CB8C1606B427004B25A8 /* dim3 Editor.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = "dim3 Editor.icns"; path = "Resources/dim3 Editor.icns"; sourceTree = SOURCE_ROOT; };
 		26C2CB961606B51E004B25A8 /* dim3Editor-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = "dim3Editor-Info.plist"; path = "dim3Editor/dim3Editor-Info.plist"; sourceTree = SOURCE_ROOT; };
 		26CD14EC1949695E00C4F868 /* base_ag_bitmap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = base_ag_bitmap.c; path = Sources/base_ag_bitmap.c; sourceTree = "<group>"; };
 		26E4021514F4721D0059C798 /* libPNG.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libPNG.a; path = ../../Common/Libraries/PNG/libPNG.a; sourceTree = "<group>"; };
 		26E4021614F4721D0059C798 /* png.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = png.h; path = ../../Common/Libraries/PNG/png.h; sourceTree = "<group>"; };
-		26E4022614F4B3ED0059C798 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.6.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		26E4022614F4B3ED0059C798 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		26E5DA451611552B003D7755 /* dialog_bone_attach_duplicate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = dialog_bone_attach_duplicate.c; path = Sources/dialogs/model/dialog_bone_attach_duplicate.c; sourceTree = "<group>"; };
 		26F278F21606CB96007470ED /* DialogView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = DialogView.h; path = dim3Editor/DialogView.h; sourceTree = SOURCE_ROOT; };
 		26F278F31606CB96007470ED /* DialogView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = DialogView.m; path = dim3Editor/DialogView.m; sourceTree = SOURCE_ROOT; };
 		26F278F91607CE53007470ED /* glue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = glue.h; path = Headers/glue.h; sourceTree = "<group>"; };
-		26F567021990993B00C8506C /* auto_generate_utility.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = auto_generate_utility.c; path = ../../dim3AutoGenerate/Sources/common/auto_generate_utility.c; sourceTree = "<group>"; };
-		26F567041990994700C8506C /* model_auto_generate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_auto_generate.c; path = ../../dim3AutoGenerate/Sources/model/model_auto_generate.c; sourceTree = "<group>"; };
+		26F567021990993B00C8506C /* auto_generate_utility.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = auto_generate_utility.c; sourceTree = "<group>"; };
+		26F567041990994700C8506C /* model_auto_generate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_auto_generate.c; sourceTree = "<group>"; };
 		26F7D34E167175D400E51363 /* dialog_distort.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = dialog_distort.c; path = Sources/dialogs/map/dialog_distort.c; sourceTree = "<group>"; };
 		26F7E043160045A900E739C4 /* import_text_decode.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = import_text_decode.c; path = Sources/code/common/import_text_decode.c; sourceTree = "<group>"; };
 		26F7E044160045A900E739C4 /* launch.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = launch.c; path = Sources/code/common/launch.c; sourceTree = "<group>"; };
@@ -851,12 +586,14 @@
 		26F7E1921600472C00E739C4 /* map_menu.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = map_menu.c; path = Sources/menus/map_menu.c; sourceTree = "<group>"; };
 		26F7E1931600472C00E739C4 /* model_menu.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_menu.c; path = Sources/menus/model_menu.c; sourceTree = "<group>"; };
 		26F7E1941600472C00E739C4 /* project_menu.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = project_menu.c; path = Sources/menus/project_menu.c; sourceTree = "<group>"; };
-		26F7E19C160047BB00E739C4 /* os_defs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = os_defs.h; path = ../dim3Common/Headers/os_defs.h; sourceTree = "<group>"; };
+		26F7E19C160047BB00E739C4 /* os_defs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = os_defs.h; path = Headers/os_defs.h; sourceTree = "<group>"; };
 		26F7E19E160047D900E739C4 /* dim3editor.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = dim3editor.h; path = Headers/dim3editor.h; sourceTree = "<group>"; };
 		26F7E19F160047D900E739C4 /* editor_defs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = editor_defs.h; path = Headers/editor_defs.h; sourceTree = "<group>"; };
 		26F7E1A0160047D900E739C4 /* interface.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = interface.h; path = Headers/interface.h; sourceTree = "<group>"; };
-		26F7EE0719A1BC3E006DD077 /* model_auto_generate_bone.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_auto_generate_bone.c; path = ../../dim3AutoGenerate/Sources/model/model_auto_generate_bone.c; sourceTree = "<group>"; };
-		26F7EE0819A1BC3E006DD077 /* model_auto_generate_decorations.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = model_auto_generate_decorations.c; path = ../../dim3AutoGenerate/Sources/model/model_auto_generate_decorations.c; sourceTree = "<group>"; };
+		26F7EE0719A1BC3E006DD077 /* model_auto_generate_bone.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_auto_generate_bone.c; sourceTree = "<group>"; };
+		26F7EE0819A1BC3E006DD077 /* model_auto_generate_decorations.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_auto_generate_decorations.c; sourceTree = "<group>"; };
+		55EECBCC21D6F35500F70D5D /* Media.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Media.xcassets; sourceTree = "<group>"; };
+		55EECBCE21D6F72A00F70D5D /* model_auto_generate_pieces.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = model_auto_generate_pieces.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -950,126 +687,6 @@
 			name = Sources;
 			sourceTree = "<group>";
 		};
-		262144FB160503F200F18538 /* Tools */ = {
-			isa = PBXGroup;
-			children = (
-				26214537160503F200F18538 /* Project */,
-				262144FC160503F200F18538 /* Map */,
-				26214522160503F200F18538 /* Model */,
-			);
-			name = Tools;
-			path = Resources/Tools;
-			sourceTree = SOURCE_ROOT;
-		};
-		262144FC160503F200F18538 /* Map */ = {
-			isa = PBXGroup;
-			children = (
-				262144FD160503F200F18538 /* Tool Auto-Texture Mesh.png */,
-				262144FE160503F200F18538 /* Tool Combine Meshes.png */,
-				262144FF160503F200F18538 /* Tool Cull.png */,
-				26214500160503F200F18538 /* Tool Edit Map Script.png */,
-				26214501160503F200F18538 /* Tool Edit Mesh.png */,
-				26214502160503F200F18538 /* Tool Edit Polygons.png */,
-				26214503160503F200F18538 /* Tool Edit Vertexes.png */,
-				26214504160503F200F18538 /* Tool Free Look.png */,
-				26214505160503F200F18538 /* Tool Grid.png */,
-				26214506160503F200F18538 /* Tool Height Map.png */,
-				26214507160503F200F18538 /* Tool Large Grid.png */,
-				26214508160503F200F18538 /* Tool Light.png */,
-				26214509160503F200F18538 /* Tool Liquid.png */,
-				2621450A160503F200F18538 /* Tool Mesh UV.png */,
-				2621450B160503F200F18538 /* Tool Mesh.png */,
-				2621450C160503F200F18538 /* Tool Move Mode.png */,
-				2621450D160503F200F18538 /* Tool Move Points Together.png */,
-				2621450E160503F200F18538 /* Tool Move Points.png */,
-				2621450F160503F200F18538 /* Tool No Grid.png */,
-				26214510160503F200F18538 /* Tool Node Duplicate.png */,
-				26214511160503F200F18538 /* Tool Node Link.png */,
-				26214512160503F200F18538 /* Tool Node Remove Link.png */,
-				26214513160503F200F18538 /* Tool Node Select.png */,
-				26214514160503F200F18538 /* Tool Node.png */,
-				26214515160503F200F18538 /* Tool Normals.png */,
-				26214516160503F200F18538 /* Tool Particle.png */,
-				26214517160503F200F18538 /* Tool Polygon.png */,
-				26214518160503F200F18538 /* Tool Rotate Mode.png */,
-				26214519160503F200F18538 /* Tool Run Map.png */,
-				2621451A160503F200F18538 /* Tool Scenery.png */,
-				2621451B160503F200F18538 /* Tool Small Grid.png */,
-				2621451C160503F200F18538 /* Tool Snap Points.png */,
-				2621451D160503F200F18538 /* Tool Sound.png */,
-				2621451E160503F200F18538 /* Tool Split Mesh.png */,
-				2621451F160503F200F18538 /* Tool Spot.png */,
-				26214520160503F200F18538 /* Tool Tesselate Mesh.png */,
-				26214521160503F200F18538 /* Tool Toggle Mode.png */,
-			);
-			path = Map;
-			sourceTree = "<group>";
-		};
-		26214522160503F200F18538 /* Model */ = {
-			isa = PBXGroup;
-			children = (
-				26214523160503F200F18538 /* Tool Bones.png */,
-				26214524160503F200F18538 /* Tool Boxes.png */,
-				26214525160503F200F18538 /* Tool Edit Mesh.png */,
-				26214526160503F200F18538 /* Tool Edit Polygons.png */,
-				26214527160503F200F18538 /* Tool Edit Vertexes.png */,
-				26214528160503F200F18538 /* Tool Hit Boxes.png */,
-				26214529160503F200F18538 /* Tool Mesh.png */,
-				2621452A160503F200F18538 /* Tool Move Mode.png */,
-				2621452B160503F200F18538 /* Tool Normals.png */,
-				2621452C160503F200F18538 /* Tool Play Blend.png */,
-				2621452D160503F200F18538 /* Tool Play Next.png */,
-				2621452E160503F200F18538 /* Tool Play Previous.png */,
-				2621452F160503F200F18538 /* Tool Play Slow.png */,
-				26214530160503F200F18538 /* Tool Play Stop.png */,
-				26214531160503F200F18538 /* Tool Play.png */,
-				26214532160503F200F18538 /* Tool Rotate Mode.png */,
-				26214533160503F200F18538 /* Tool Select Vertex With Bone.png */,
-				26214534160503F200F18538 /* Tool Show Bone Names.png */,
-				26214535160503F200F18538 /* Tool Show First Mesh.png */,
-				26214536160503F200F18538 /* Tool Textured.png */,
-			);
-			path = Model;
-			sourceTree = "<group>";
-		};
-		26214537160503F200F18538 /* Project */ = {
-			isa = PBXGroup;
-			children = (
-				26214538160503F200F18538 /* Tool Run Project.png */,
-			);
-			path = Project;
-			sourceTree = "<group>";
-		};
-		26214574160503FA00F18538 /* Lists */ = {
-			isa = PBXGroup;
-			children = (
-				26214575160503FA00F18538 /* Back.png */,
-				26214576160503FA00F18538 /* Edit.png */,
-				26214577160503FA00F18538 /* Minus.png */,
-				26214578160503FA00F18538 /* Plus.png */,
-				26214579160503FA00F18538 /* Set.png */,
-				26C25370161FFA4700A6E809 /* Up.png */,
-				26C25373161FFA4B00A6E809 /* Down.png */,
-			);
-			name = Lists;
-			path = Resources/Lists;
-			sourceTree = SOURCE_ROOT;
-		};
-		2621457F1605040300F18538 /* Items */ = {
-			isa = PBXGroup;
-			children = (
-				262145801605040300F18538 /* light.png */,
-				262145811605040300F18538 /* node.png */,
-				262145821605040300F18538 /* node_defined.png */,
-				262145831605040300F18538 /* particle.png */,
-				262145841605040300F18538 /* scenery.png */,
-				262145851605040300F18538 /* sound.png */,
-				262145861605040300F18538 /* spot.png */,
-			);
-			name = Items;
-			path = Resources/Items;
-			sourceTree = SOURCE_ROOT;
-		};
 		2653B1B6198F42DF008C40E4 /* dim3AutoGenerate */ = {
 			isa = PBXGroup;
 			children = (
@@ -1077,6 +694,7 @@
 				2653B1B8198F432B008C40E4 /* Sources */,
 			);
 			name = dim3AutoGenerate;
+			path = ../../dim3AutoGenerate;
 			sourceTree = "<group>";
 		};
 		2653B1B7198F431C008C40E4 /* Headers */ = {
@@ -1087,7 +705,7 @@
 				2653B1BD198F435B008C40E4 /* autogenerateutility.h */,
 				2653B1BE198F435B008C40E4 /* dim3autogenerate.h */,
 			);
-			name = Headers;
+			path = Headers;
 			sourceTree = "<group>";
 		};
 		2653B1B8198F432B008C40E4 /* Sources */ = {
@@ -1097,7 +715,7 @@
 				2653B1B9198F433C008C40E4 /* Map */,
 				2653B1BA198F4342008C40E4 /* Model */,
 			);
-			name = Sources;
+			path = Sources;
 			sourceTree = "<group>";
 		};
 		2653B1B9198F433C008C40E4 /* Map */ = {
@@ -1112,16 +730,19 @@
 				2653B1C5198F436E008C40E4 /* map_auto_generate.c */,
 			);
 			name = Map;
+			path = map;
 			sourceTree = "<group>";
 		};
 		2653B1BA198F4342008C40E4 /* Model */ = {
 			isa = PBXGroup;
 			children = (
+				55EECBCE21D6F72A00F70D5D /* model_auto_generate_pieces.c */,
 				26F7EE0719A1BC3E006DD077 /* model_auto_generate_bone.c */,
 				26F7EE0819A1BC3E006DD077 /* model_auto_generate_decorations.c */,
 				26F567041990994700C8506C /* model_auto_generate.c */,
 			);
 			name = Model;
+			path = model;
 			sourceTree = "<group>";
 		};
 		265AB43115FEF0D8005CDBB0 /* dim3ModelUtility */ = {
@@ -1184,7 +805,7 @@
 				26C1DFCE160044C3007FDAC7 /* modelprivate.h */,
 				26C1DFCF160044C3007FDAC7 /* modelutility.h */,
 			);
-			name = Headers;
+			path = Headers;
 			sourceTree = "<group>";
 		};
 		265AB43615FEF10E005CDBB0 /* Sources */ = {
@@ -1213,7 +834,7 @@
 				26C1DFE4160044CF007FDAC7 /* model_util_texture.c */,
 				26C1DFE5160044CF007FDAC7 /* model_util_transform.c */,
 			);
-			name = Sources;
+			path = Sources;
 			sourceTree = "<group>";
 		};
 		26900AC514F2044F008026D5 = {
@@ -1274,12 +895,9 @@
 				265AB42615FEEF39005CDBB0 /* InfoPlist.strings */,
 				26C2CB8C1606B427004B25A8 /* dim3 Editor.icns */,
 				265AB42915FEEF3E005CDBB0 /* MainMenu.xib */,
-				262144FB160503F200F18538 /* Tools */,
-				26214574160503FA00F18538 /* Lists */,
-				2621457F1605040300F18538 /* Items */,
+				55EECBCC21D6F35500F70D5D /* Media.xcassets */,
 			);
 			name = Resources;
-			path = dim3Setup;
 			sourceTree = "<group>";
 		};
 		26900AF914F20597008026D5 /* OSXCode */ = {
@@ -1363,6 +981,7 @@
 				26F567021990993B00C8506C /* auto_generate_utility.c */,
 			);
 			name = Common;
+			path = common;
 			sourceTree = "<group>";
 		};
 		26F7E03F1600457B00E739C4 /* Common */ = {
@@ -1617,6 +1236,7 @@
 		26F7E1981600475E00E739C4 /* Common Headers */ = {
 			isa = PBXGroup;
 			children = (
+				26F7E19C160047BB00E739C4 /* os_defs.h */,
 			);
 			name = "Common Headers";
 			path = ../dim3Common;
@@ -1625,7 +1245,6 @@
 		26F7E1991600478D00E739C4 /* Headers */ = {
 			isa = PBXGroup;
 			children = (
-				26F7E19C160047BB00E739C4 /* os_defs.h */,
 				266E2B9816096FE400CE6147 /* mac_os_defs.h */,
 				26F7E19E160047D900E739C4 /* dim3editor.h */,
 				26F7E19F160047D900E739C4 /* editor_defs.h */,
@@ -1646,11 +1265,6 @@
 				26900ACD14F2044F008026D5 /* Frameworks */,
 				26900ACE14F2044F008026D5 /* Resources */,
 				265A630C150B286D0063EEDD /* Copy Application */,
-				2621458E1605045B00F18538 /* Copy Item Icons */,
-				2621458F1605046E00F18538 /* Copy List Icons */,
-				262145901605047B00F18538 /* Copy Project Tools */,
-				262145911605048500F18538 /* Copy Map Tools */,
-				262145921605049000F18538 /* Copy Model Tools */,
 			);
 			buildRules = (
 			);
@@ -1693,7 +1307,7 @@
 			files = (
 				265AB42B15FEEF3E005CDBB0 /* MainMenu.xib in Resources */,
 				265AB42815FEEF39005CDBB0 /* InfoPlist.strings in Resources */,
-				26C2CB8D1606B427004B25A8 /* dim3 Editor.icns in Resources */,
+				55EECBCD21D6F35500F70D5D /* Media.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1851,6 +1465,7 @@
 				26F7E0C71600462C00E739C4 /* dialog_grid.c in Sources */,
 				26F7E0C81600462C00E739C4 /* dialog_height_map_import.c in Sources */,
 				26F7E0C91600462C00E739C4 /* dialog_new_map.c in Sources */,
+				55EECBCF21D6F72B00F70D5D /* model_auto_generate_pieces.c in Sources */,
 				26F7E0CA1600462C00E739C4 /* dialog_obj_import.c in Sources */,
 				26F7E0D11600463800E739C4 /* dialog_blended_animation.c in Sources */,
 				26F7E0D21600463800E739C4 /* dialog_finish_import.c in Sources */,
@@ -1995,7 +1610,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
 				CLANG_WARN_EMPTY_BODY = YES;
@@ -2023,7 +1637,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = YES;
-				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = "dim3 Editor";
 				CLANG_ENABLE_OBJC_ARC = NO;
 				COPY_PHASE_STRIP = NO;
 				DEPLOYMENT_POSTPROCESSING = YES;
@@ -2043,14 +1657,15 @@
 					"$(SRCROOT)/../../dim3ModelUtility/Headers",
 					"$(SRCROOT)/../../dim3Editor/Headers",
 					"$(SRCROOT)/../Common/Headers",
+					/opt/local/include/,
 				);
 				INFOPLIST_FILE = "dim3Editor/dim3Editor-Info.plist";
 				INSTALL_PATH = "";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../Common/Libraries/PNG",
+					/opt/local/lib,
 				);
-				MACOSX_DEPLOYMENT_TARGET = 10.6;
 				OTHER_LDFLAGS = "-lz";
 				PRODUCT_NAME = "dim3 Editor";
 				SDKROOT = macosx;

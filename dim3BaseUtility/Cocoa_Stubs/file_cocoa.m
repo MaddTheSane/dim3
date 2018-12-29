@@ -44,7 +44,7 @@ void cocoa_file_get_application_support_path(char *path)
 	paths=NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,NSUserDomainMask,TRUE);
 #endif
 
-	strncpy(path,[[paths objectAtIndex:0] UTF8String],1024);
+	strncpy(path,[[paths objectAtIndex:0] fileSystemRepresentation],1024);
 	path[1023]=0x0;
 }
 
