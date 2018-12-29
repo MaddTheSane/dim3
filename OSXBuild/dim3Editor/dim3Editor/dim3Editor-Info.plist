@@ -9,7 +9,7 @@
 	<key>CFBundleIconFile</key>
 	<string>dim3 Editor.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.klinksoftware.dim3Editor</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
