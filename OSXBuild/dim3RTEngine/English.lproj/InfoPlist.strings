@@ -1,0 +1,5 @@
+/* Localized versions of Info.plist keys */
+
+CFBundleName = "dim3 RT Engine";
+CFBundleShortVersionString = "dim3 RT Engine version 1.0";
+CFBundleGetInfoString = "dim3 RT Engine version 1.0, Copyright 2001-2013 Klink! Software";

@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,43 +29,51 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
+#include "objects.h"
 #include "scripts.h"
-#include "models.h"
 
-JSBool js_model_animation_get_index(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_model_animation_get_currentAnimationName(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_model_animation_set_index(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_model_animation_start_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_model_animation_stop_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_model_animation_cancel_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_model_animation_change_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_model_animation_interrupt_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_model_animation_start_then_change_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_model_animation_fade_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
+JSValueRef js_model_animation_get_index(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_model_animation_get_currentAnimationName(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_model_animation_get_playing(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+bool js_model_animation_set_index(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception);
+JSValueRef js_model_animation_start_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_stop_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_stop_all_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_cancel_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_change_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_interrupt_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_start_then_change_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_fade_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_rag_doll_start_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_rag_doll_random_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_rag_doll_clear_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_model_animation_cancel_attached_particles_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
 
 extern js_type			js;
 
-JSClass			model_animation_class={"model_animation_class",0,
-							script_add_property,JS_PropertyStub,
-							JS_PropertyStub,JS_PropertyStub,
-							JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub,JS_FinalizeStub};
+JSStaticValue 		model_animation_props[]={
+							{"index",					js_model_animation_get_index,					js_model_animation_set_index,		kJSPropertyAttributeDontDelete},
+							{"currentAnimationName",	js_model_animation_get_currentAnimationName,	NULL,								kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{"playing",					js_model_animation_get_playing,					NULL,								kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{0,0,0,0}};
 
-script_js_property	model_animation_props[]={
-							{"index",					js_model_animation_get_index,					js_model_animation_set_index},
-							{"currentAnimationName",	js_model_animation_get_currentAnimationName,	NULL},
-							{0}};
+JSStaticFunction	model_animation_functions[]={
+							{"start",					js_model_animation_start_func,						kJSPropertyAttributeDontDelete},
+							{"stop",					js_model_animation_stop_func,						kJSPropertyAttributeDontDelete},
+							{"stopAll",					js_model_animation_stop_all_func,					kJSPropertyAttributeDontDelete},
+							{"cancel",					js_model_animation_cancel_func,						kJSPropertyAttributeDontDelete},
+							{"change",					js_model_animation_change_func,						kJSPropertyAttributeDontDelete},
+							{"interrupt",				js_model_animation_interrupt_func,					kJSPropertyAttributeDontDelete},
+							{"startThenChange",			js_model_animation_start_then_change_func,			kJSPropertyAttributeDontDelete},
+							{"fade",					js_model_animation_fade_func,						kJSPropertyAttributeDontDelete},
+							{"ragDollStart",			js_model_animation_rag_doll_start_func,				kJSPropertyAttributeDontDelete},
+							{"ragDollRandom",			js_model_animation_rag_doll_random_func,			kJSPropertyAttributeDontDelete},
+							{"ragDollClear",			js_model_animation_rag_doll_clear_func,				kJSPropertyAttributeDontDelete},
+							{"cancelAttachedParticles",	js_model_animation_cancel_attached_particles_func,	kJSPropertyAttributeDontDelete},
+							{0,0,0}};
 
-script_js_function	model_animation_functions[]={
-							{"start",					js_model_animation_start_func,					1},
-							{"stop",					js_model_animation_stop_func,					0},
-							{"cancel",					js_model_animation_cancel_func,					1},
-							{"change",					js_model_animation_change_func,					1},
-							{"interrupt",				js_model_animation_interrupt_func,				1},
-							{"startThenChange",			js_model_animation_start_then_change_func,		2},
-							{"fade",					js_model_animation_fade_func,					2},
-							{0}};
-
-extern model_draw* js_find_model_draw(JSObject *j_obj,bool is_child);
+JSClassRef			model_animation_class;
 
 /* =======================================================
 
@@ -73,9 +81,19 @@ extern model_draw* js_find_model_draw(JSObject *j_obj,bool is_child);
       
 ======================================================= */
 
-void script_add_model_animation_object(JSObject *parent_obj)
+void script_init_model_animation_object(void)
 {
-	script_create_child_object(parent_obj,"animation",&model_animation_class,model_animation_props,model_animation_functions);
+	model_animation_class=script_create_class("model_animation_class",model_animation_props,model_animation_functions);
+}
+
+void script_free_model_animation_object(void)
+{
+	script_free_class(model_animation_class);
+}
+
+JSObjectRef script_add_model_animation_object(JSContextRef cx,JSObjectRef parent_obj,int script_idx)
+{
+	return(script_create_child_object(cx,parent_obj,model_animation_class,"animation",script_idx));
 }
 
 /* =======================================================
@@ -84,27 +102,33 @@ void script_add_model_animation_object(JSObject *parent_obj)
       
 ======================================================= */
 
-JSBool js_model_animation_get_index(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_model_animation_get_index(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	model_draw			*draw;
 
-	draw=js_find_model_draw(j_obj,TRUE);
-	*vp=INT_TO_JSVAL(draw->script_animation_idx);
-
-	return(JS_TRUE);
+	draw=script_find_model_draw(j_obj);
+	return(script_int_to_value(cx,draw->script_animation_idx));
 }
 
-JSBool js_model_animation_get_currentAnimationName(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_model_animation_get_currentAnimationName(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
-	char				name[64];
+	char				ani_name[64];
 	model_draw			*draw;
 
-	draw=js_find_model_draw(j_obj,TRUE);
+	draw=script_find_model_draw(j_obj);
 
-	model_get_current_animation_name(draw,name);
-	*vp=script_string_to_value(name);
+	model_get_current_animation_name(draw,ani_name);
+	return(script_string_to_value(cx,ani_name));
+}
 
-	return(JS_TRUE);
+JSValueRef js_model_animation_get_playing(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
+{
+	model_draw				*draw;
+	model_draw_animation	*draw_animation;
+
+	draw=script_find_model_draw(j_obj);
+	draw_animation=&draw->animations[draw->script_animation_idx];
+	return(script_bool_to_value(cx,draw_animation->mode==am_playing));
 }
 
 /* =======================================================
@@ -113,16 +137,30 @@ JSBool js_model_animation_get_currentAnimationName(JSContext *cx,JSObject *j_obj
       
 ======================================================= */
 
-JSBool js_model_animation_set_index(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+bool js_model_animation_set_index(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception)
 {
 	model_draw			*draw;
 
-	draw=js_find_model_draw(j_obj,TRUE);
+	draw=script_find_model_draw(j_obj);
 
-	draw->script_animation_idx=JSVAL_TO_INT(*vp);
+	draw->script_animation_idx=script_value_to_int(cx,vp);
 	if ((draw->script_animation_idx<0) || (draw->script_animation_idx>=max_model_blend_animation)) draw->script_animation_idx=0;
 
-	return(JS_TRUE);
+	return(TRUE);
+}
+
+/* =======================================================
+
+      Animation Exceptions
+      
+======================================================= */
+
+JSValueRef js_model_animation_name_exception(JSContextRef cx,char *name)
+{
+	char			err_str[256];
+
+	sprintf(err_str,"Named animation does not exist: %s",name);
+	return(script_create_exception(cx,err_str));
 }
 
 /* =======================================================
@@ -131,101 +169,128 @@ JSBool js_model_animation_set_index(JSContext *cx,JSObject *j_obj,jsval id,jsval
       
 ======================================================= */
 
-JSBool js_model_animation_start_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_model_animation_start_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	char			name[name_str_len];
 	model_draw		*draw;
 	
-	draw=js_find_model_draw(j_obj,TRUE);
-
-	script_value_to_string(argv[0],name,name_str_len);
+	if (!script_check_param_count(cx,func,argc,1,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
 	
-	if (!model_start_animation(draw,name)) {
-		JS_ReportError(js.cx,"Named animation does not exist: %s",name);
-		return(JS_FALSE);
+	draw=script_find_model_draw(j_obj);
+
+	script_value_to_string(cx,argv[0],name,name_str_len);
+	
+	if (!model_start_animation(draw,name,game_time_get())) {
+		*exception=js_model_animation_name_exception(cx,name);
 	}
 	
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
-JSBool js_model_animation_stop_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_model_animation_stop_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	model_draw		*draw;
 	
-	draw=js_find_model_draw(j_obj,TRUE);
+	if (!script_check_param_count(cx,func,argc,0,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
 	
+	draw=script_find_model_draw(j_obj);
 	model_stop_animation(draw);
-	return(JS_TRUE);
+
+	return(script_null_to_value(cx));
 }
 
-JSBool js_model_animation_cancel_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_model_animation_stop_all_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
+{
+	model_draw		*draw;
+	
+	if (!script_check_param_count(cx,func,argc,0,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
+	
+	draw=script_find_model_draw(j_obj);
+	model_stop_all_animation(draw);
+
+	return(script_null_to_value(cx));
+}
+
+JSValueRef js_model_animation_cancel_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	char			name[name_str_len];
 	model_draw		*draw;
 	
-	draw=js_find_model_draw(j_obj,TRUE);
+	if (!script_check_param_count(cx,func,argc,1,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
+	
+	draw=script_find_model_draw(j_obj);
 
-	script_value_to_string(argv[0],name,name_str_len);
+	script_value_to_string(cx,argv[0],name,name_str_len);
 	if (!model_cancel_animation(draw,name)) {
-		JS_ReportError(js.cx,"Named animation does not exist: %s",name);
-		return(JS_FALSE);
+		*exception=js_model_animation_name_exception(cx,name);
 	}
 	
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
-JSBool js_model_animation_change_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_model_animation_change_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	char			name[name_str_len];
 	model_draw		*draw;
 	
-	draw=js_find_model_draw(j_obj,TRUE);
+	if (!script_check_param_count(cx,func,argc,1,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
+	
+	draw=script_find_model_draw(j_obj);
 
-	script_value_to_string(argv[0],name,name_str_len);
-	if (!model_change_animation(draw,name)) {
-		JS_ReportError(js.cx,"Named animation does not exist: %s",name);
-		return(JS_FALSE);
+	script_value_to_string(cx,argv[0],name,name_str_len);
+	if (!model_change_animation(draw,name,game_time_get())) {
+		*exception=js_model_animation_name_exception(cx,name);
 	}
 	
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
-JSBool js_model_animation_interrupt_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_model_animation_interrupt_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	char			name[name_str_len];
 	model_draw		*draw;
 	
-	draw=js_find_model_draw(j_obj,TRUE);
+	if (!script_check_param_count(cx,func,argc,1,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
+	
+	draw=script_find_model_draw(j_obj);
 
-	script_value_to_string(argv[0],name,name_str_len);
-	if (!model_interrupt_animation(draw,name)) {
-		JS_ReportError(js.cx,"Named animation does not exist: %s",name);
-		return(JS_FALSE);
+	script_value_to_string(cx,argv[0],name,name_str_len);
+	if (!model_interrupt_animation(draw,name,game_time_get())) {
+		*exception=js_model_animation_name_exception(cx,name);
 	}
 	
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
-JSBool js_model_animation_start_then_change_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_model_animation_start_then_change_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	char			name[name_str_len];
 	model_draw		*draw;
 	
-	draw=js_find_model_draw(j_obj,TRUE);
+	if (!script_check_param_count(cx,func,argc,2,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
+	
+	draw=script_find_model_draw(j_obj);
 
-	script_value_to_string(argv[0],name,name_str_len);
-	if (!model_start_animation(draw,name)) {
-		JS_ReportError(js.cx,"Named animation does not exist: %s",name);
-		return(JS_FALSE);
+	script_value_to_string(cx,argv[0],name,name_str_len);
+	if (!model_start_animation(draw,name,game_time_get())) {
+		*exception=js_model_animation_name_exception(cx,name);
+		return(script_null_to_value(cx));
 	}
 
-	script_value_to_string(argv[1],name,name_str_len);
-	if (!model_change_animation(draw,name)) {
-		JS_ReportError(js.cx,"Named animation does not exist: %s",name);
-		return(JS_FALSE);
+	script_value_to_string(cx,argv[1],name,name_str_len);
+	if (!model_change_animation(draw,name,game_time_get())) {
+		*exception=js_model_animation_name_exception(cx,name);
+		return(script_null_to_value(cx));
 	}
 
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
 /* =======================================================
@@ -234,13 +299,103 @@ JSBool js_model_animation_start_then_change_func(JSContext *cx,JSObject *j_obj,u
       
 ======================================================= */
 
-JSBool js_model_animation_fade_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_model_animation_fade_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	model_draw		*draw;
 	
-	draw=js_find_model_draw(j_obj,TRUE);
-	model_fade_start(draw,JSVAL_TO_INT(argv[1]),script_value_to_float(argv[0]));
+	if (!script_check_param_count(cx,func,argc,2,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
 	
-	return(JS_TRUE);
+	draw=script_find_model_draw(j_obj);
+	model_fade_start(draw,script_value_to_int(cx,argv[1]),script_value_to_float(cx,argv[0]));
+	
+	return(script_null_to_value(cx));
+}
+
+/* =======================================================
+
+      Rag Dolls
+      
+======================================================= */
+
+JSValueRef js_model_animation_rag_doll_start_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
+{
+	d3pnt			force_pnt;
+	model_draw		*draw;
+	
+	if (!script_check_param_count(cx,func,argc,4,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
+	
+	draw=script_find_model_draw(j_obj);
+	script_value_to_point(cx,argv[0],&force_pnt);
+	model_rag_doll_start(draw,&force_pnt,script_value_to_int(cx,argv[1]),script_value_to_int(cx,argv[3]),script_value_to_bool(cx,argv[2]),FALSE);
+	
+	return(script_null_to_value(cx));
+}
+
+JSValueRef js_model_animation_rag_doll_random_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
+{
+	d3pnt			force_pnt;
+	model_draw		*draw;
+	
+	if (!script_check_param_count(cx,func,argc,2,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
+	
+	draw=script_find_model_draw(j_obj);
+	force_pnt.x=force_pnt.y=force_pnt.z=0;
+	model_rag_doll_start(draw,&force_pnt,0,script_value_to_int(cx,argv[1]),script_value_to_bool(cx,argv[0]),TRUE);
+	
+	return(script_null_to_value(cx));
+}
+
+JSValueRef js_model_animation_rag_doll_clear_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
+{
+	model_draw		*draw;
+	
+	if (!script_check_param_count(cx,func,argc,0,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
+	
+	draw=script_find_model_draw(j_obj);
+	model_rag_doll_clear(draw);
+	
+	return(script_null_to_value(cx));
+}
+
+/* =======================================================
+
+      Effect Cancels
+      
+======================================================= */
+
+JSValueRef js_model_animation_cancel_attached_particles_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
+{
+	int					script_idx;
+	script_type			*script;
+	
+	if (!script_check_param_count(cx,func,argc,0,exception)) return(script_null_to_value(cx));
+	if (!script_check_fail_in_construct(cx,func,j_obj,exception)) return(script_null_to_value(cx));
+	
+	script_idx=(int)JSObjectGetPrivate(j_obj);
+	script=js.script_list.scripts[script_idx];
+	
+		// get correct type for canceling particles
+		
+	switch (script->attach.thing_type) {
+	
+		case thing_type_object:
+			effect_object_bone_attach_particle_dispose(script->attach.obj_idx);
+			break;
+			
+		case thing_type_weapon:
+			effect_weapon_bone_attach_particle_dispose(script->attach.obj_idx,script->attach.weap_idx);
+			break;
+			
+		case thing_type_projectile:
+			if (script->attach.proj_idx!=-1) effect_projectile_bone_attach_particle_dispose(script->attach.proj_idx);
+			break;
+
+	}
+	
+	return(script_null_to_value(cx));
 }
 

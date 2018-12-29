@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,20 +29,18 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "scripts.h"
-#include "interfaces.h"
-#include "inputs.h"
 
 extern server_type			server;
+extern iface_type			iface;
 extern js_type				js;
-extern hud_type				hud;
 extern setup_type			setup;
+extern file_path_setup_type	file_path_setup;
 
-int							chooser_idx,old_server_state;
+int							chooser_idx;
+bool						chooser_key_held_down;
 char						chooser_sub_txt[max_chooser_sub_txt][max_chooser_text_data_sz];
-bool						chooser_start_trigger;
-
-extern int chooser_find(char *name);
 
 /* =======================================================
 
@@ -100,144 +98,239 @@ void chooser_text_substitute(char *init_str,char *sub_str,int max_len)
       
 ======================================================= */
 
+void chooser_create_elements(void)
+{
+	int							n,idx,template_idx;
+	char						path[1024],path2[1024],fname[256],
+								str[max_chooser_text_data_sz],title[max_chooser_frame_text_sz];
+	iface_chooser_type			*chooser,*template_chooser;
+	iface_chooser_piece_type	*piece,*template_piece;
+	iface_chooser_frame_type	*frame;
+	
+	chooser=&iface.chooser_list.choosers[chooser_idx];
+	template_chooser=NULL;
+
+		// check for template
+
+	template_idx=iface_chooser_find_idx(&iface,chooser->template_name);
+	if (template_idx!=-1) template_chooser=&iface.chooser_list.choosers[template_idx];
+	
+		// setup frame
+		
+	frame=NULL;
+
+	if (template_chooser==NULL) {
+		if (chooser->frame.on) frame=&chooser->frame;
+	}
+	else {
+		if (template_chooser->frame.on) frame=&template_chooser->frame;
+	}
+
+	if (frame!=NULL) {
+		chooser_text_substitute(frame->title,title,max_chooser_frame_text_sz);
+		element_frame_add(title,-1,frame->x,frame->y,frame->wid,frame->high,-1,0,NULL,0,NULL);
+	}
+
+		// mark regular pieces as not being
+		// used to override a template
+
+	piece=chooser->pieces;
+
+	for (n=0;n!=chooser->npiece;n++) {
+		piece->used_in_override=FALSE;
+		piece++;
+	}
+
+		// template pieces
+
+	if (template_chooser!=NULL) {
+
+		template_piece=template_chooser->pieces;
+
+		for (n=0;n!=template_chooser->npiece;n++) {
+
+				// get the override
+
+			piece=NULL;
+
+			idx=iface_chooser_find_piece_idx(chooser,template_piece->id);
+			if (idx!=-1) {
+				piece=&chooser->pieces[idx];
+				piece->used_in_override=TRUE;
+			}
+
+			if (piece==NULL) piece=template_piece;
+
+				// add template pieces
+
+			switch (template_piece->type) {
+
+				case chooser_piece_type_text:
+					chooser_text_substitute(piece->data.text.str,str,max_chooser_text_data_sz);
+					element_text_add(str,template_piece->id,template_piece->x,template_piece->y,template_piece->data.text.size,template_piece->data.text.just,NULL,template_piece->clickable);
+					break;
+
+				case chooser_piece_type_item:
+					file_paths_data(&file_path_setup,path,"Chooser",piece->data.item.file,"png");
+					if (template_piece->clickable) {
+						sprintf(fname,"%s_selected",template_piece->data.item.file);
+						file_paths_data(&file_path_setup,path2,"Chooser",fname,"png");
+						element_button_bitmap_add(path,path2,template_piece->id,template_piece->x,template_piece->y,template_piece->wid,template_piece->high,element_pos_left,element_pos_top);
+					}
+					else {
+						element_bitmap_add(path,0,template_piece->x,template_piece->y,template_piece->wid,template_piece->high,FALSE);
+					}
+					break;
+					
+				case chooser_piece_type_model:
+					element_model_add(piece->data.model.model_name,piece->data.model.animate_name,template_piece->data.model.resize,NULL,&template_piece->data.model.rot,template_piece->id,template_piece->x,template_piece->y);
+					break;
+
+				case chooser_piece_type_button:
+					element_button_text_add(piece->data.button.name,template_piece->id,template_piece->x,template_piece->y,template_piece->wid,template_piece->high,element_pos_left,element_pos_top);
+					break;
+
+			}
+
+			template_piece++;
+		}
+	}
+
+		// normal pieces
+
+	for (n=0;n!=chooser->npiece;n++) {
+
+		piece=&chooser->pieces[n];
+		if (piece->used_in_override) continue;
+
+		switch (piece->type) {
+
+			case chooser_piece_type_text:
+				chooser_text_substitute(piece->data.text.str,str,max_chooser_text_data_sz);
+				element_text_add(str,piece->id,piece->x,piece->y,piece->data.text.size,piece->data.text.just,NULL,piece->clickable);
+				break;
+
+			case chooser_piece_type_item:
+				file_paths_data(&file_path_setup,path,"Chooser",piece->data.item.file,"png");
+				
+				if (piece->clickable) {
+					sprintf(fname,"%s_selected",piece->data.item.file);
+					file_paths_data(&file_path_setup,path2,"Chooser",fname,"png");
+					element_button_bitmap_add(path,path2,piece->id,piece->x,piece->y,piece->wid,piece->high,element_pos_left,element_pos_top);
+				}
+				else {
+					element_bitmap_add(path,0,piece->x,piece->y,piece->wid,piece->high,FALSE);
+				}
+				break;
+				
+			case chooser_piece_type_model:
+				element_model_add(piece->data.model.model_name,piece->data.model.animate_name,piece->data.model.resize,NULL,&piece->data.model.rot,piece->id,piece->x,piece->y);
+				break;
+
+			case chooser_piece_type_button:
+				element_button_text_add(piece->data.button.name,piece->id,piece->x,piece->y,piece->wid,piece->high,element_pos_left,element_pos_top);
+				break;
+
+		}
+	}
+
+		// no key downs
+
+	chooser_key_held_down=FALSE;
+}
+
 void chooser_open(void)
 {
-	int					n;
-	char				path[1024],path2[1024],fname[256],
-						title[max_chooser_frame_text_sz],str[max_chooser_text_data_sz];
-	chooser_type		*chooser;
-	chooser_text_type	*text;
-	chooser_item_type	*item;
-	chooser_button_type	*button;
-	chooser_frame_type	frame;
-	
-	chooser=&hud.choosers[chooser_idx];
-	
-		// text substitution for frames
-		
-	memmove(&frame,&chooser->frame,sizeof(chooser_frame_type));
-
-	chooser_text_substitute(chooser->frame.title,title,max_chooser_frame_text_sz);
-	strcpy(frame.title,title);
-	
-		// setup gui
-		
-	gui_initialize(NULL,NULL,TRUE);
-	gui_set_frame(&frame);
-		
-		// text
-
-	text=chooser->texts;
-
-	for (n=0;n!=chooser->ntext;n++) {
-		chooser_text_substitute(text->data,str,max_chooser_text_data_sz);
-		element_text_add(str,text->text_id,text->x,text->y,text->size,text->just,text->clickable,FALSE);
-		text++;
-	}
-
-		// items
-
-	item=chooser->items;
-
-	for (n=0;n!=chooser->nitem;n++) {
-	
-		file_paths_data(&setup.file_path_setup,path,"Chooser",item->file,"png");
-		
-		if (item->clickable) {
-			sprintf(fname,"%s_selected",item->file);
-			file_paths_data(&setup.file_path_setup,path2,"Chooser",fname,"png");
-			element_button_bitmap_add(path,path2,item->item_id,item->x,item->y,item->wid,item->high,element_pos_left,element_pos_top);
-		}
-		else {
-			element_bitmap_add(path,0,item->x,item->y,item->wid,item->high,FALSE);
-		}
-		
-		item++;
-	}
-
-		// buttons
-
-	button=chooser->buttons;
-
-	for (n=0;n!=chooser->nbutton;n++) {
-		element_button_text_add(button->name,button->item_id,button->x,button->y,button->wid,button->high,element_pos_left,element_pos_top);
-		button++;
-	}
-	
-		// change state
-
-	old_server_state=server.state;
-	
-	server.state=gs_chooser;
+	gui_initialize(NULL,NULL);
+	chooser_create_elements();
 }
 
 void chooser_close(void)
 {
 	gui_shutdown();
-	
-	if (server.state==gs_chooser) server.state=old_server_state;			// only reset to running if picked chooser item didn't reset to something else
 }
 
-/* =======================================================
-
-      Chooser Triggers
-      
-======================================================= */
-
-void chooser_trigger_clear(void)
-{
-	chooser_start_trigger=FALSE;
-}
-
-void chooser_trigger_check(void)
-{
-	if (chooser_start_trigger) chooser_open();
-}	
-
-void chooser_trigger_set(char *name,char *sub_txt)
+bool chooser_setup(char *name,char *sub_txt,char *err_str)
 {
 	int				n;
 
-	if (server.state!=gs_running) return;
-
 		// find chooser
 
-	chooser_idx=chooser_find(name);
-	if (chooser_idx==-1) return;
+	chooser_idx=iface_chooser_find_idx(&iface,name);
+	if (chooser_idx==-1) {
+		sprintf(err_str,"Chooser does not exist: %s",name);
+		return(FALSE);
+	}
 
 		// setup text substitutions
 
-	for (n=0;n!=max_chooser_sub_txt;n++) {
-		strcpy(chooser_sub_txt[n],(char*)&sub_txt[max_chooser_text_data_sz*n]);
+	if (sub_txt!=NULL) {
+		for (n=0;n!=max_chooser_sub_txt;n++) {
+			strcpy(chooser_sub_txt[n],(char*)&sub_txt[max_chooser_text_data_sz*n]);
+		}
 	}
-
-		// trigger chooser open
 	
-	chooser_start_trigger=TRUE;
+		// run chooser
+		
+	server.next_state=gs_chooser;
+	
+	return(TRUE);
 }
 
 /* =======================================================
 
-      Menu Input
+      Chooser Keys
       
 ======================================================= */
 
-void chooser_click(void)
+bool chooser_is_key_down(iface_chooser_piece_type *piece)
 {
-	int					id,ch;
+	switch (piece->key) {
+		case chooser_key_return:
+			return(input_get_keyboard_return());
+		case chooser_key_escape:
+			return(input_get_keyboard_escape());
+		case chooser_key_space:
+			return(input_get_keyboard_key(SDL_SCANCODE_SPACE));
+		case chooser_key_0:
+			return(input_get_keyboard_key(SDL_SCANCODE_0));
+	}
+
+	if ((piece->key>=chooser_key_1) && (piece->key<=chooser_key_9)) return(input_get_keyboard_key(SDL_SCANCODE_1+(piece->key-chooser_key_1)));
+	if ((piece->key>=chooser_key_A) && (piece->key<=chooser_key_Z)) return(input_get_keyboard_key(SDL_SCANCODE_A+(piece->key-chooser_key_A)));
+
+	return(FALSE);
+}
+
+/* =======================================================
+
+      Chooser Input
+      
+======================================================= */
+
+void chooser_input(void)
+{
+	int							n,id,idx,next_idx,template_idx;
+	bool						leave_chooser;
+	iface_chooser_type			*chooser;
+	iface_chooser_piece_type	*piece;
 	
 	id=-1;
-	
-		// check for ok/cancel keys
-		
-	ch=input_gui_get_keyboard_key(FALSE);
-	if (ch!=0x0) {
-		if (ch==0x1B) id=hud.choosers[chooser_idx].key.cancel_id;
-		if (ch==0xD) id=hud.choosers[chooser_idx].key.ok_id;
+
+	chooser=&iface.chooser_list.choosers[chooser_idx];
+
+		// check for any key presses
+
+	for (n=0;n!=chooser->npiece;n++) {
+		piece=&chooser->pieces[n];
+		if (piece->key==chooser_key_none) continue;
+
+		if (chooser_is_key_down(piece)) id=piece->id;
 	}
-	
-	if (id!=-1) {			// wait for key up
-		while (input_gui_get_keyboard_key(FALSE)==ch) {}
+
+	if (chooser_key_held_down) {
+		if (id==-1) chooser_key_held_down=FALSE;
+		id=-1;
 	}
 
 		// if no key check clicking
@@ -251,8 +344,48 @@ void chooser_click(void)
 		
 	hud_click();
 	
-	chooser_close();
-	scripts_post_event_console(&js.game_attach,sd_event_chooser,0,id);
+		// check for any goto clicks
+
+	piece=NULL;
+
+	template_idx=iface_chooser_find_idx(&iface,chooser->template_name);
+	if (template_idx!=-1) {
+		idx=iface_chooser_find_piece_idx(&iface.chooser_list.choosers[template_idx],id);
+		piece=&iface.chooser_list.choosers[template_idx].pieces[idx];
+	}
+
+	if (piece==NULL) {
+		idx=iface_chooser_find_piece_idx(chooser,id);
+		piece=&chooser->pieces[idx];
+	}
+	
+	if (piece!=NULL) {
+	
+		next_idx=iface_chooser_find_idx(&iface,piece->goto_name);
+		
+		if (next_idx!=-1) {
+			element_clear();
+			chooser_idx=next_idx;
+			chooser_create_elements();
+			return;
+		}
+	}
+
+		// check if this item leaves
+		// the chooser
+
+	leave_chooser=TRUE;
+
+	if (piece!=NULL) {
+		leave_chooser=!piece->no_close;
+	}
+	
+		// set the state here as event
+		// might reset it to something else
+		
+	if (leave_chooser) server.next_state=gs_running;
+	
+	scripts_post_event_console(js.game_script_idx,-1,sd_event_chooser,0,id);
 }
 
 /* =======================================================
@@ -264,5 +397,5 @@ void chooser_click(void)
 void chooser_run(void)
 {
 	gui_draw(1.0f,TRUE);
-	chooser_click();
+	chooser_input();
 }

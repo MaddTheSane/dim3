@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,32 +29,23 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "scripts.h"
 #include "objects.h"
-#include "weapons.h"
-#include "projectiles.h"
-#include "video.h"
-#include "inputs.h"
-#include "interfaces.h"
-
-extern int					os_vers_major,os_vers_minor_1,os_vers_minor_2;
-extern char					arch_type[64];
 
 extern render_info_type		render_info;
 extern map_type				map;
+extern view_type			view;
 extern server_type			server;
+extern iface_type			iface;
 extern js_type				js;
 extern setup_type			setup;
-extern hud_type				hud;
 extern network_setup_type	net_setup;
+extern file_path_setup_type	file_path_setup;
 
-char						bind_type_str[][16]={"Game","Map","Remote"},
+char						object_type_str[][32]={"Player","Remote","Bot Multiplayer","Bot Map","Object"},
+							bind_type_str[][16]={"Game","Map","Remote"},
 							effect_type_str[][16]={"Flash","Particle","Lightning","Ray","Globe","Shake"};
-bool						dim3_debug=FALSE;
-FILE						*debug_log_file=NULL;
-
-extern void console_add_system(char *txt);
-extern int game_time_get(void);
 
 /* =======================================================
 
@@ -62,58 +53,87 @@ extern int game_time_get(void);
       
 ======================================================= */
 
-void debug_header(char *txt,int count,int memory)
+void debug_dump_header(FILE *file,char *str)
 {
-	fprintf(stdout,"****************************************************************************\n");
-	if (memory!=-1) {
-		fprintf(stdout,"%s | Count=%d | Memory=%.2fM\n",txt,count,(((float)memory)/1000000.0f));
-	}
-	else {
-		fprintf(stdout,"%s | Count=%d\n",txt,count);
-	}
-	fprintf(stdout,"****************************************************************************\n\n");
+	fwrite("\r\n### ",1,6,file);
+	fwrite(str,1,strlen(str),file);
+	fwrite(" ###\r\n\r\n",1,8,file);
 }
 
-void debug_space(char *txt,int fieldsz)
+void debug_dump_info_str(FILE *file,char *title,char *value)
+{
+	fwrite(title,1,strlen(title),file);
+	fwrite(": ",1,2,file);
+	fwrite(value,1,strlen(value),file);
+	fwrite("\r\n",1,2,file);
+}
+
+void debug_dump_info_int(FILE *file,char *title,int value)
+{
+	char		str[256];
+
+	sprintf(str,"%d",value);
+
+	fwrite(title,1,strlen(title),file);
+	fwrite(": ",1,2,file);
+	fwrite(str,1,strlen(str),file);
+	fwrite("\r\n",1,2,file);
+}
+
+void debug_dump_info_enable(FILE *file,char *title,bool enabled)
+{
+	fwrite(title,1,strlen(title),file);
+	fwrite(": ",1,2,file);
+	if (enabled) {
+		fwrite("Enabled",1,7,file);
+	}
+	else {
+		fwrite("Disabled",1,8,file);
+	}
+	fwrite("\r\n",1,2,file);
+}
+
+void debug_info_return(FILE *file)
+{
+	fwrite("\r\n",1,2,file);
+}
+
+void debug_info_table_str(FILE *file,char *title,int fieldsz)
 {
 	int			strsz;
 	char		str[256];
 	
-	strsz=strlen(txt);
+	strsz=strlen(title);
 	
 	if (strsz>=fieldsz) {
-		strcpy(str,txt);
+		strcpy(str,title);
 	}
 	else {
 		memset(str,0x20,256);
-		memmove(str,txt,strsz);
+		memmove(str,title,strsz);
 	}
 	
 	str[fieldsz]=0x0;
-	fprintf(stdout,str);
+
+	fwrite(str,1,strlen(str),file);
 }
 
-void debug_int_space(int n,int fieldsz)
+void debug_info_table_int(FILE *file,int value,int fieldsz)
 {
 	char		str[256];
 	
-	sprintf(str,"%d",n);
-	debug_space(str,fieldsz);
+	sprintf(str,"%d",value);
+	debug_info_table_str(file,str,fieldsz);
 }
 
-void debug_space_tag(unsigned long tag,int fieldsz)
+void debug_info_table_tag(FILE *file,unsigned long tag,int fieldsz)
 {
 	char		str[256];
 	
 	memmove(str,&tag,4);
 	str[4]=0x0;
 	
-	debug_space(str,fieldsz);
-}
-
-void debug_return(void)
-{
-	fprintf(stdout,"\n");
+	debug_info_table_str(file,str,fieldsz);
 }
 
 /* =======================================================
@@ -124,354 +144,378 @@ void debug_return(void)
 
 void debug_dump(void)
 {
-	int					i,idx,cnt,mem_sz;
+	int					n,k,t,nvertex,npoly;
+	char				str[256],path[1024];
+	char				timer_type_str[][32]={"Single","Repeat","Chain","Dispose"};
 	obj_type			*obj;
-	effect_type			*effect;
-	proj_type			*proj;
 	weapon_type			*weap;
+	proj_type			*proj;
 	proj_setup_type		*proj_setup;
+	effect_type			*effect;
 	model_type			*mdl;
-	script_type			*script;
+	script_type			*script,*script_parent;
 	timer_type			*timer;
-	SDL_version			*sdl_ver;
-	
-	console_add_system("Debugging info dumped to stdout");
-	
-	fprintf(stdout,"\n\n");
-	fprintf(stdout,"#########################################################################\n");
-	fprintf(stdout,"Dump: dim3 Debugging Info\n");
-	fprintf(stdout,"Engine v%s\n",dim3_version);
-	fprintf(stdout,"(c) 2000-2007 Klink! Software\n");
-	fprintf(stdout,"#########################################################################\n\n");
+	FILE				*file;
 
-		// game info
-		
-	fprintf(stdout,"**************************************\n");
-	fprintf(stdout,"Game\n");
-	fprintf(stdout,"**************************************\n\n");
-	fprintf(stdout,"Project:  %s\n",net_setup.host.proj_name);
-	fprintf(stdout,"Tick: %d\n",game_time_get());
-	
-	debug_return();
-	
-		// system info
-		
-	fprintf(stdout,"**************************************\n");
-	fprintf(stdout,"System\n");
-	fprintf(stdout,"**************************************\n\n");
-	fprintf(stdout,"Arch Type: %s\n",arch_type);
+		// start output file
 
-#ifdef D3_OS_MAC
-	fprintf(stdout,"OS Version: %d.%d.%d\n",os_vers_major,os_vers_minor_1,os_vers_minor_2);
-#endif
+	file_paths_app_data(&file_path_setup,path,"Debug","info","txt");
 	
-	sdl_ver=(SDL_version*)SDL_Linked_Version();
-	fprintf(stdout,"SDL Version: %d.%d.%d\n",sdl_ver->major,sdl_ver->minor,sdl_ver->patch);
-	fprintf(stdout,"JavaScript Version: %.2f\n",((float)JS_VERSION/100.0f));
-	fprintf(stdout,"PNG Version: %s\n",PNG_LIBPNG_VER_STRING);
+	file=fopen(path,"w");
+	if (file==NULL) return;
 	
-	debug_return();
-	
-		// video info
+		// app
 		
-	fprintf(stdout,"**************************************\n");
-	fprintf(stdout,"Video\n");
-	fprintf(stdout,"**************************************\n\n");
-	fprintf(stdout,"Engine: %s\n",render_info.name);
-	fprintf(stdout,"Screen: %d,%d at %d\n",render_info.monitor_x_sz,render_info.monitor_y_sz,render_info.monitor_refresh_rate);
-	fprintf(stdout,"Max Texture Units: %d\n",render_info.texture_unit_count);
-	fprintf(stdout,"Max Texture Size: %d\n",render_info.texture_max_size);
-	
-	if (!gl_check_frame_buffer_ok()) fprintf(stdout,"Shadow support disabled; Unsupported on this video card.\n");
-	if (!gl_check_fsaa_ok()) fprintf(stdout,"FSAA support disabled; Unsupported on this video card.\n");
-	if (!gl_check_texture_compress_ok()) fprintf(stdout,"Compression disabled; Unsupported on this video card.\n");
-	if (!gl_check_point_sprite_ok()) fprintf(stdout,"Point sprite support disabled; Unsupported on this video card.\n");
-	if (!gl_check_shader_ok()) fprintf(stdout,"GLSL support disabled; Unsupported on this video card.\n");
+	debug_dump_header(file,"App");
 
-	fprintf(stdout,"Extensions:\n%s\n",render_info.ext_string);
+		// engine
+
+	debug_dump_header(file,"Engine");
+
+	debug_dump_info_str(file,"Engine",dim3_version);
+	debug_dump_info_str(file,"Project",iface.project.name);
+
+	debug_dump_info_str(file,"GPU",render_info.name);
+	sprintf(str,"%d,%d @ %d",render_info.desktop.wid,render_info.desktop.high,render_info.monitor_refresh_rate);
+	debug_dump_info_str(file,"Screen",str);
+	debug_dump_info_int(file,"Max Texture Size",render_info.texture_max_size);
+	
+	debug_dump_info_enable(file,"FBO",gl_check_frame_buffer_ok());
+	debug_dump_info_enable(file,"NPOT Textures",gl_check_npot_textures_ok());
+	debug_dump_info_enable(file,"FSAA",gl_check_fsaa_ok());
+
+	debug_dump_info_str(file,"Extensions",render_info.ext_string);
 
 #ifdef D3_OS_WINDOWS
-	fprintf(stdout,"WGL Extensions:\n%s\n",wglGetExtensionsStringARB(wglGetCurrentDC()));
+	debug_dump_info_str(file,"WGL Extensions",(char*)wglGetExtensionsStringARB(wglGetCurrentDC()));
 #endif
-	
-	debug_return();
 
-		// map info
-		
-	fprintf(stdout,"**************************************\n");
-	fprintf(stdout,"Map\n");
-	fprintf(stdout,"**************************************\n\n");
-	fprintf(stdout,"Map:  %s\n",map.info.name);
-	fprintf(stdout,"Author:  %s\n",map.info.author);
-	fprintf(stdout,"Mesh Count:  %d\n",map.mesh.nmesh);
-	fprintf(stdout,"Liquid Count:  %d\n",map.liquid.nliquid);
-	fprintf(stdout,"Spot Count:  %d\n",map.nspot);
-	fprintf(stdout,"Scenery Count:  %d\n",map.nscenery);
-	fprintf(stdout,"Node Count:  %d\n",map.nnode);
-	
-	debug_return();
-	
+		// timing
+
+	debug_dump_header(file,"Timing");
+
+	debug_dump_info_int(file,"Raw Tick",game_time_get_raw());
+	debug_dump_info_int(file,"Game Tick",game_time_get());
+
+	debug_dump_info_int(file,"Server Run Tick (Game)",server.time.run_tick);
+	debug_dump_info_int(file,"Server Network Update Tick (Game)",server.time.network_update_tick);
+	debug_dump_info_int(file,"Server Network Group Synch Tick (Game)",server.time.network_group_synch_tick);
+
+	debug_dump_info_int(file,"View Input Tick (Raw)",view.time.input_tick);
+	debug_dump_info_int(file,"View Draw Tick (Raw)",view.time.draw_tick);
+	debug_dump_info_int(file,"View Run Tick (Game)",view.time.run_tick);
+	debug_dump_info_int(file,"View Frame Draw Time",view.time.draw_time);
+
+	debug_dump_info_int(file,"Map Start Tick (Game)",map.start_game_tick);
+	debug_dump_info_int(file,"JS Timer Tick (Game)",js.timer_tick);
+
+		// map
+
+	debug_dump_header(file,"Map");
+
+	debug_dump_info_str(file,"Name",map.info.name);
+	debug_dump_info_str(file,"Author",map.info.author);
+
+	debug_dump_info_int(file,"Mesh Count",map.mesh.nmesh);
+	debug_dump_info_int(file,"Liquid Count",map.liquid.nliquid);
+	debug_dump_info_int(file,"Spot Count",map.nspot);
+	debug_dump_info_int(file,"Scenery Count",map.nscenery);
+	debug_dump_info_int(file,"Node Count",map.nnode);
+
 		// objects
 
-	debug_header("Objects",server.count.obj,(sizeof(obj_type)*server.count.obj));
-	
-	debug_space("Name",25);
-	debug_space("Type",15);
-	debug_space("Script",25);
-	debug_space("Binding",10);
-	debug_return();
-	debug_space("------------------------",25);
-	debug_space("------------------------",15);
-	debug_space("------------------------",25);
-	debug_space("---------",10);
-	debug_return();
-	
-	obj=server.objs;
-	
-	for ((i=0);(i!=server.count.obj);i++) {
-		debug_space(obj->name,25);
-		debug_space(obj->type,15);
-		if (!obj->scenery.on) {
-			idx=scripts_find_uid(obj->attach.script_uid);
-			debug_space(js.scripts[idx].name,25);
+	debug_dump_header(file,"Objects");
+
+	debug_info_table_str(file,"Index",6);
+	debug_info_table_str(file,"Name",25);
+	debug_info_table_str(file,"Type",15);
+	debug_info_table_str(file,"Model",25);
+	debug_info_table_str(file,"Script",30);
+	debug_info_table_str(file,"Binding",10);
+	debug_info_return(file);
+	debug_info_table_str(file,"-----",6);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"--------------",15);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"-----------------------------",30);
+	debug_info_table_str(file,"---------",10);
+	debug_info_return(file);
+
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
+
+		debug_info_table_int(file,obj->idx,6);
+		debug_info_table_str(file,obj->name,25);
+		debug_info_table_str(file,object_type_str[obj->type],15);
+		
+		if (obj->draw.model_idx==-1) {
+			debug_info_table_str(file,"*",25);
 		}
 		else {
-			debug_space("*",25);
+			debug_info_table_str(file,server.model_list.models[obj->draw.model_idx]->name,25);
 		}
-		debug_space(bind_type_str[obj->bind],10);
-		debug_return();
-		obj++;
+		
+		if (!obj->scenery.on) {
+			debug_info_table_str(file,js.script_list.scripts[obj->script_idx]->name,30);
+		}
+		else {
+			debug_info_table_str(file,"*",30);
+		}
+		
+		debug_info_table_str(file,bind_type_str[obj->bind],10);
+		debug_info_return(file);
 	}
-	
-	debug_return();
-	
+
 		// weapons
 
-	debug_header("Weapons",server.count.weapon,(sizeof(weapon_type)*server.count.weapon));
-	
-	debug_space("Name",20);
-	debug_space("Object",20);
-	debug_return();
-	debug_space("-------------------",20);
-	debug_space("-------------------",20);
-	debug_return();
-	
-	weap=server.weapons;
-	
-	for ((i=0);(i!=server.count.weapon);i++) {
-		obj=object_find_uid(weap->obj_uid);
-		
-		debug_space(weap->name,20);
-		debug_space(obj->name,20);
-		debug_return();
-		weap++;
+	debug_dump_header(file,"Weapons");
+
+	debug_info_table_str(file,"Index",6);
+	debug_info_table_str(file,"Object",25);
+	debug_info_table_str(file,"Name",25);
+	debug_info_table_str(file,"Model",25);
+	debug_info_table_str(file,"Script",30);
+	debug_info_return(file);
+	debug_info_table_str(file,"-----",6);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"-----------------------------",30);
+	debug_info_return(file);
+
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
+
+		if (object_count_weapons(obj)==0) continue;
+
+		for (k=0;k!=max_weap_list;k++) {
+			weap=obj->weap_list.weaps[k];
+			if (weap==NULL) continue;
+
+			debug_info_table_int(file,weap->idx,6);
+			debug_info_table_str(file,obj->name,25);
+			debug_info_table_str(file,weap->name,25);
+			if (weap->draw.model_idx==-1) {
+				debug_info_table_str(file,"*",25);
+			}
+			else {
+				debug_info_table_str(file,server.model_list.models[weap->draw.model_idx]->name,25);
+			}
+			debug_info_table_str(file,js.script_list.scripts[weap->script_idx]->name,30);
+			debug_info_return(file);
+		}
 	}
-	
-	debug_return();
-	
+
 		// projectile setups
 
-	debug_header("Projectile Setups",server.count.proj_setup,(sizeof(proj_setup_type)*server.count.proj_setup));
-	
-	debug_space("Name",20);
-	debug_space("Object",20);
-	debug_space("Weapon",20);
-	debug_return();
-	debug_space("-------------------",20);
-	debug_space("-------------------",20);
-	debug_space("-------------------",20);
-	debug_return();
-	
-	proj_setup=server.proj_setups;
-	
-	for ((i=0);(i!=server.count.proj_setup);i++) {
-		obj=object_find_uid(proj_setup->obj_uid);
-		weap=weapon_find_uid(proj_setup->weap_uid);
-		
-		debug_space(proj_setup->name,20);
-		debug_space(obj->name,20);
-		debug_space(weap->name,20);
-		debug_return();
-		proj_setup++;
+	debug_dump_header(file,"Projectile Setups");
+
+	debug_info_table_str(file,"Index",6);
+	debug_info_table_str(file,"Object",25);
+	debug_info_table_str(file,"Weapon",25);
+	debug_info_table_str(file,"Name",25);
+	debug_info_table_str(file,"Model",25);
+	debug_info_table_str(file,"Script",30);
+	debug_info_return(file);
+	debug_info_table_str(file,"-----",6);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"-----------------------------",30);
+	debug_info_return(file);
+
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
+
+		if (object_count_weapons(obj)==0) continue;
+
+		for (k=0;k!=max_weap_list;k++) {
+			weap=obj->weap_list.weaps[k];
+			if (weap==NULL) continue;
+
+			if (weapon_count_projectile_setups(weap)==0) continue;
+
+			for (t=0;t!=max_proj_setup_list;t++) {
+				proj_setup=weap->proj_setup_list.proj_setups[t];
+				if (proj_setup==NULL) continue;
+
+				debug_info_table_int(file,proj_setup->idx,6);
+				debug_info_table_str(file,obj->name,25);
+				debug_info_table_str(file,weap->name,25);
+				debug_info_table_str(file,proj_setup->name,25);
+				if (proj_setup->draw.model_idx==-1) {
+					debug_info_table_str(file,"*",25);
+				}
+				else {
+					debug_info_table_str(file,server.model_list.models[proj_setup->draw.model_idx]->name,25);
+				}
+				debug_info_table_str(file,js.script_list.scripts[proj_setup->script_idx]->name,30);
+				debug_info_return(file);
+			}
+		}
 	}
+
+		// projectiles
+
+	debug_dump_header(file,"Projectiles");
+
+	debug_info_table_str(file,"Name",25);
+	debug_info_table_str(file,"Object",25);
+	debug_info_table_str(file,"Weapon",25);
+	debug_info_return(file);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_table_str(file,"------------------------",25);
+	debug_info_return(file);
 	
-	debug_return();
+	for (n=0;n!=max_proj_list;n++) {
+		proj=server.proj_list.projs[n];
+		if (!proj->on) continue;
+
+		obj=server.obj_list.objs[proj->obj_idx];
+		weap=obj->weap_list.weaps[proj->weap_idx];
+		proj_setup=weap->proj_setup_list.proj_setups[proj->proj_setup_idx];
+		
+		debug_info_table_str(file,proj_setup->name,25);
+		debug_info_table_str(file,obj->name,25);
+		debug_info_table_str(file,weap->name,25);
+		debug_info_return(file);
+	}
+
+		// effects
+
+	debug_dump_header(file,"Effects");
+	
+	debug_info_table_str(file,"Type",20);
+	debug_info_table_str(file,"Life Tick",10);
+	debug_info_return(file);
+	debug_info_table_str(file,"------------------",20);
+	debug_info_table_str(file,"---------",10);
+	debug_info_return(file);
+	
+	for (n=0;n!=max_effect_list;n++) {
+		effect=server.effect_list.effects[n];
+		if (!effect->on) continue;
+
+		debug_info_table_str(file,effect_type_str[effect->effecttype],20);
+		debug_info_table_int(file,effect->life_tick,10);
+		debug_info_return(file);
+	}
 	
 		// models
 
-	mem_sz=sizeof(model_type)*server.count.model;
+	debug_dump_header(file,"Models");
+	
+	debug_info_table_str(file,"Name",25);
+	debug_info_table_str(file,"Vertexes",10);
+	debug_info_table_str(file,"Polygons",10);
+	debug_info_table_str(file,"Ref Count",10);
+	debug_info_return(file);
+	debug_info_table_str(file,"-----------------------",25);
+	debug_info_table_str(file,"---------",10);
+	debug_info_table_str(file,"---------",10);
+	debug_info_table_str(file,"---------",10);
+	debug_info_return(file);
 
-	mdl=server.models;
-	
-	for (i=0;i!=server.count.model;i++) {
-		mem_sz+=model_memory_size(mdl);
-		mdl++;
-	}
-		
-	debug_header("Models",server.count.model,mem_sz);
-	
-	debug_space("Name",32);
-	debug_space("Vertexes",10);
-	debug_space("Trigs",10);
-	debug_space("Ref Count",10);
-	debug_return();
-	debug_space("------------------------------",32);
-	debug_space("---------",10);
-	debug_space("---------",10);
-	debug_space("---------",10);
-	debug_return();
+	for (n=0;n!=max_model_list;n++) {
+		mdl=server.model_list.models[n];
+		if (mdl==NULL) continue;
 
-	mdl=server.models;
-	
-	for (i=0;i!=server.count.model;i++) {
-		debug_space(mdl->name,32);
-		debug_int_space(mdl->meshes[0].nvertex,10);
-		debug_int_space(mdl->meshes[0].ntrig,10);
-		debug_int_space(mdl->reference_count,10);
-		debug_return();
-		mdl++;
+		nvertex=npoly=0;
+
+		for (k=0;k!=mdl->nmesh;k++) {
+			nvertex+=mdl->meshes[k].nvertex;
+			npoly+=mdl->meshes[k].npoly;
+		}
+
+		debug_info_table_str(file,mdl->name,25);
+		debug_info_table_int(file,nvertex,10);
+		debug_info_table_int(file,npoly,10);
+		debug_info_table_int(file,mdl->load.reference_count,10);
+		debug_info_return(file);
 	}
-	
-	debug_return();
-	
-		// projectiles
-		
-	debug_header("Projectiles",server.count.proj,(sizeof(proj_type)*max_projectile));
-	
-	debug_space("Name",20);
-	debug_space("Object",20);
-	debug_space("Weapon",20);
-	debug_return();
-	debug_space("-------------------",20);
-	debug_space("-------------------",20);
-	debug_space("-------------------",20);
-	debug_return();
-	
-	proj=server.projs;
-	
-	for ((i=0);(i!=server.count.proj);i++) {
-		obj=object_find_uid(proj->obj_uid);
-		weap=weapon_find_uid(proj->weap_uid);
-		proj_setup=proj_setups_find_uid(proj->proj_setup_uid);
-		
-		debug_space(proj_setup->name,20);
-		debug_space(obj->name,20);
-		debug_space(weap->name,20);
-		debug_return();
-		proj++;
-	}
-	
-	debug_return();
-	
-		// effects
-		
-	debug_header("Effects",server.count.effect,(sizeof(effect_type)*max_effect));
-	
-	debug_space("Type",10);
-	debug_space("Life Tick",10);
-	debug_return();
-	debug_space("---------",10);
-	debug_space("---------",10);
-	debug_return();
-	
-	effect=server.effects;
-	
-	for ((i=0);(i!=server.count.effect);i++) {
-		debug_space(effect_type_str[effect->effecttype],10);
-		debug_int_space(effect->life_tick,10);
-		debug_return();
-		effect++;
-	}
-	
-	debug_return();
-	
+
 		// scripts
 		
-	script=js.scripts;
+	debug_dump_header(file,"Scripts");
 	
-	cnt=0;
-	for ((i=0);(i!=max_scripts);i++) {
-		if (script->used) cnt++;
-		script++;
-	}
+	debug_info_table_str(file,"Name",35);
+	debug_info_table_str(file,"Parent",35);
+	debug_info_table_str(file,"Attached Events",35);
+	debug_info_return(file);
+	debug_info_table_str(file,"----------------------------------",35);
+	debug_info_table_str(file,"----------------------------------",35);
+	debug_info_table_str(file,"----------------------------------",35);
+	debug_info_return(file);
+	
+	for (n=0;n!=max_script_list;n++) {
+		script=js.script_list.scripts[n];
+		if (script==NULL) continue;
+
+		debug_info_table_str(file,script->name,35);
 		
-	debug_header("Scripts",cnt,-1);
-	
-	debug_space("Name",32);
-	debug_return();
-	debug_space("-------------------------------",32);
-	debug_return();
-	
-	script=js.scripts;
-	
-	for ((i=0);(i!=max_scripts);i++) {
-		if (script->used) {
-			debug_space(script->name,32);
-			debug_return();
+		if (script->parent_idx==-1) {
+			debug_info_table_str(file,"*",35);
 		}
-		script++;
+		else {
+			script_parent=js.script_list.scripts[script->parent_idx];
+			debug_info_table_str(file,script_parent->name,35);
+		}
+
+		debug_info_table_str(file,script->name,35);
+		
+		for (k=0;k!=event_main_id_count;k++) {
+			if (script->event_attach_list.func[k]!=NULL) {
+				script_get_define_for_event((event_main_id_start+k),str);
+				fwrite(str,1,strlen(str),file);
+				fwrite(" ",1,1,file);
+			}
+		}
+		
+		debug_info_return(file);
 	}
-	
-	debug_return();
-	
+
 		// timers
-		
-	debug_header("Timers",js.count.timer,-1);
+
+	debug_dump_header(file,"Timers");
 	
-	debug_space("Script",32);
-	debug_space("Count",10);
-	debug_space("Type",10);
-	debug_return();
-	debug_space("-------------------------------",32);
-	debug_space("---------",10);
-	debug_space("---------",10);
-	debug_return();
+	debug_info_table_str(file,"Script",35);
+	debug_info_table_str(file,"Count",10);
+	debug_info_table_str(file,"Frequency",10);
+	debug_info_table_str(file,"Type",10);
+	debug_info_return(file);
+	debug_info_table_str(file,"----------------------------------",35);
+	debug_info_table_str(file,"---------",10);
+	debug_info_table_str(file,"---------",10);
+	debug_info_table_str(file,"---------",10);
+	debug_info_return(file);
 	
-	timer=js.timers;
-	
-	for ((i=0);(i!=js.count.timer);i++) {
-		script=&js.scripts[scripts_find_uid(timer->attach.script_uid)];
-		debug_space(script->name,32);
-		debug_int_space(timer->count,10);
-		debug_space((timer->mode==timer_mode_repeat)?"Timer":"Wait",10);
-		debug_return();
-		timer++;
+	for (n=0;n!=max_timer_list;n++) {
+		timer=js.timer_list.timers[n];
+		if (timer==NULL) continue;
+
+		script=js.script_list.scripts[timer->script_idx];
+		debug_info_table_str(file,script->name,35);
+		debug_info_table_int(file,timer->count,10);
+		debug_info_table_int(file,timer->freq,10);
+		debug_info_table_str(file,timer_type_str[timer->mode==timer_mode_repeat],10);
+		debug_info_return(file);
 	}
-	
-	debug_return();
 
-	fflush(stdout);
-}
+		// finish
 
-/* =======================================================
+	fclose(file);
 
-      Debug Log
-      
-======================================================= */
+		// console message
 
-void debug_log(char *str)
-{
-	char			path[1024];
-	
-	if (debug_log_file==NULL) {
-		file_paths_documents(&setup.file_path_setup,path,"Settings","Log","txt");
-		debug_log_file=fopen(path,"w");
-		if (debug_log_file==NULL) return;
-	}
-		
-	fwrite(str,1,strlen(str),debug_log_file);
-	fwrite("\n",1,1,debug_log_file);
-	fflush(debug_log_file);
-}
-/* =======================================================
+	snprintf(str,256,"Debug Info: %s",path);
+	str[255]=0x0;
 
-      Debug Game
-      
-======================================================= */
-
-void debug_game(void)
-{
-	dim3_debug=!dim3_debug;
+	console_add_system(str);
 }
 
 /* =======================================================
@@ -482,7 +526,7 @@ void debug_game(void)
 
 void debug_screenshot(void)
 {
-	char				path[1024],file_name[256];
+	char				path[1024],file_name[256],str[256];
 	struct tm			*tm;
 	time_t				curtime;
 	
@@ -490,14 +534,17 @@ void debug_screenshot(void)
 	tm=localtime(&curtime);
 
 	sprintf(file_name,"%.4d%.2d%.2d_%.2d%.2d%.2d",(tm->tm_year+1900),(tm->tm_mon+1),tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);
-	file_paths_documents(&setup.file_path_setup,path,"Screenshots",file_name,"png");
-		
-	if (!gl_screen_shot(render_info.view_x,render_info.view_y,setup.screen.x_sz,setup.screen.y_sz,FALSE,path)) {
+	file_paths_app_data(&file_path_setup,path,"Screenshots",file_name,"png");
+	
+	if (!gl_screen_shot(0,0,view.screen.x_sz,view.screen.y_sz,FALSE,path)) {
 		console_add_system("Unable to save screenshot");
 		return;
 	}
-	
-	console_add_system("Screenshot taken");
+
+	snprintf(str,256,"Screenshot: %s",path);
+	str[255]=0x0;
+
+	console_add_system(str);
 }
 
 /* =======================================================
@@ -517,20 +564,58 @@ void debug_input(void)
 	
 		// others require debug mode to be on
 		
-	if (!hud.debug) return;
+	if (!iface.setup.game_debug) return;
 	
 	if (input_action_get_state_single(nc_debug_status)) {
 		debug_dump();
 		return;
 	}
+}
+
+/* =======================================================
+
+      Debug Console Map Change
+      
+======================================================= */
+
+bool debug_change_map(char *name)
+{
+	int							n;
+	char						str[256];
+	bool						map_ok;
+	file_path_directory_type	*fpd;
+
+		// verify the map
+		
+	map_ok=FALSE;
 	
-	if (input_action_get_state_single(nc_debug_game)) {
-		debug_game();
-		return;
+	fpd=file_paths_read_directory_data(&file_path_setup,"Maps","xml");
+	
+	for (n=0;n!=fpd->nfile;n++) {
+		if (strcasecmp(fpd->files[n].file_name,name)==0) {
+			map_ok=TRUE;
+			break;
+		}
+	}
+
+	file_paths_close_directory(fpd);
+	
+		// map exists?
+		
+	if (!map_ok) {
+		sprintf(str,"map '%s' does not exist",name);
+		console_add_error(str);
+		return(FALSE);
 	}
 	
-	if (input_action_get_state_single(nc_debug_map)) {
-		map_pick_trigger_set();
-		return;
-	}
+		// set map
+		
+	strncpy(map.info.name,name,name_str_len);
+	strcpy(map.info.player_start_name,"Start");
+	
+	server.map_change.on=TRUE;
+	server.map_change.skip_media=TRUE;
+	server.map_change.player_restart=FALSE;
+	
+	return(TRUE);
 }

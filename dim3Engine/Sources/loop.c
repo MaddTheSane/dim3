@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,61 +29,17 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "remotes.h"
-#include "interfaces.h"
-#include "inputs.h"
-#include "video.h"
-#include "consoles.h"
+#include "interface.h"
+#include "network.h"
+#include "objects.h"
+#include "scripts.h"
 
-extern bool					game_loop_pause;
-
+extern app_type				app;
 extern map_type				map;
 extern server_type			server;
 extern view_type			view;
 extern setup_type			setup;
 extern network_setup_type	net_setup;
-
-bool						interface_quit,game_loop_pause_button_down;
-
-extern void game_time_initialize(void);
-extern int game_time_calculate(void);
-extern void game_time_pause_start(void);
-extern void game_time_pause_end(void);
-extern int time_get(void);
-extern int game_time_get(void);
-extern bool server_initialize(char *err_str);
-extern void server_shutdown(void);
-extern void server_loop(int tick);
-extern bool view_initialize(char *err_str);
-extern void view_shutdown(void);
-extern void view_loop(int tick);
-extern void view_pause_draw(void);
-extern void map_clear_changes(void);
-extern bool map_need_rebuild(void);
-extern bool map_rebuild_changes(char *err_str);
-extern void game_end(void);
-extern void map_end(void);
-
-/* =======================================================
-
-      Game Loop Interface Quit
-      
-======================================================= */
-
-void interface_quit_trigger_clear(void)
-{
-	interface_quit=FALSE;
-}
-
-void interface_quit_trigger_set(void)
-{
-	interface_quit=TRUE;
-}
-
-bool interface_quit_trigger_check(void)
-{
-	return(interface_quit);
-}
 
 /* =======================================================
 
@@ -91,271 +47,532 @@ bool interface_quit_trigger_check(void)
       
 ======================================================= */
 
-void loop_game_run(int tick)
+bool loop_view_input()
 {
-		// receive networking updates
-		
-	if (net_setup.client.joined) {
-		if (!remote_network_get_updates(tick)) return;
-	}
-	
-		// start fps
-		
-	view.fps.time=time_get();
-	
-		// mark for interface quits
-		
-	interface_quit_trigger_clear();
-	
-		// run game
+		// view input
 
-	server_loop(tick);
-	
-		// sending network updates
+	view_loop_input();
 
-	if (net_setup.client.joined) {
-
-		if (tick>=server.time.network_update_tick) {
-			server.time.network_update_tick=tick+client_communication_update_msec_rate;
-			remote_network_send_updates(tick);
-		}
-		
-		if (tick>=server.time.network_group_synch_tick) {
-			server.time.network_group_synch_tick=tick+client_communication_group_synch_msec_rate;
-			remote_network_send_group_synch();
-		}
-
-		if (tick>=server.time.network_latency_ping_tick) {
-			server.time.network_latency_ping_tick=tick+client_communication_latency_ping_msec_rate;
-			remote_network_send_latency_ping(tick);
-		}
-
-	}
-
-		// draw the view
-
-	view_loop(tick);
-
-		// check interface quits
-		
-	if (interface_quit_trigger_check()) {
+		// if state has changed to intro,
+		// then we must be exiting a running
+		// game
+			
+	if (server.next_state==gs_intro) {
 		map_end();
 		game_end();
-		intro_open();
-		return;
+		return(FALSE);
 	}
+	
+		// any other state change
+		// means an early exit
+		
+	return(server.next_state==gs_running);
+}
+
+void loop_server_run(void)
+{
+		// networking
+
+	switch (net_setup.mode) {
+
+		case net_mode_client:
+			if (!net_client_process_messages()) return;
+			break;
+
+		case net_mode_host:
+			net_host_process_messages();
+			break;
+
+	}
+	
+		// run server
+
+	timers_run();
+	server_run();
+
+		// objects disposed within scripts
+		// have to be triggered outside of
+		// other scripts and triggers
+
+	object_dispose_triggered();
+	
+		// sending network updates
+		// only clients send group synchs
+		// and latency pings
+		
+	switch (net_setup.mode) {
+	
+		case net_mode_client:
+			remote_network_send_updates();
+			remote_network_send_group_synch();
+			break;
+			
+		case net_mode_host:
+			net_host_player_send_updates();
+			break;
+	}
+	
+		// check for score limits
+		
+	score_limit_check_scores();
+}
+
+void loop_view_run()
+{
+		// draw the view
+
+	view_run();
+	view_loop_draw();
 	
 		// calculate fps
 
-	view.fps.tick+=(time_get()-view.fps.time);
-
-	if (view.fps.tick>=1000) {						// average fps over 1 second
-		view.fps.total=((float)view.fps.count*1000)/(float)view.fps.tick;
-		view.fps.tick=view.fps.count=0;
-	}
+	view_calculate_fps();
 }
 
 /* =======================================================
 
-      Pausing
+      App Activate/Deactivate
       
 ======================================================= */
 
-bool loop_pause(void)
+	// phone/pad versions react differently
+	// to these events by going saving
+	// the state and turning off the game
+
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+
+void SDL_iOSEvent_WillTerminate(void)
 {
-	bool		unpause;
+	app.loop_quit=true;
+}
 
-		// only windowed versions can pause
+void SDL_iOSEvent_DidReceiveMemoryWarning(void)
+{
+	// nothing to do as resigning always cleans everything up
+}
 
-	if (!gl_in_window_mode()) return(FALSE);
-
-		// current not paused
-
-	if (!game_loop_pause) {
-		if (input_app_active()) return(FALSE);
-
-			// pause game
-
-		game_loop_pause=TRUE;
-		game_loop_pause_button_down=FALSE;
-
-		input_mouse_pause();
-		game_time_pause_start();
-
-		return(TRUE);
-	}
-
-		// paused
-
-	input_event_pump();
-
-	view_pause_draw();
-
-		// are we clicking to unpause
-
-	unpause=FALSE;
-
-	if (input_app_active()) {
-		if (game_loop_pause_button_down) {
-			unpause=!input_gui_get_mouse_left_button_down();
-		}
-		else {
-			game_loop_pause_button_down=input_gui_get_mouse_left_button_down();
-		}
-	}
-
-	if (!unpause) {
-		usleep(10000);
-		return(TRUE);
-	}
-
-		// unpause game
-
-	game_loop_pause=FALSE;
+void SDL_iOSEvent_WillResignActive(void)
+{
+	app.state=as_suspended;
 
 	input_clear();
+	input_mouse_pause();
+		
+	SDL_PauseAudio(1);
+}
+
+void SDL_iOSEvent_DidEnterBackground(void)
+{
+	if (server.state!=gs_intro) {
+		if (server.map_open) map_end();
+		if (server.game_open) game_end();
+	}
+}
+
+void SDL_iOSEvent_WillEnterForeground(void)
+{
+	if (server.state!=gs_intro) {
+		server.state=gs_intro;
+		intro_open();
+	}
+}
+
+void SDL_iOSEvent_DidBecomeActive(void)
+{
+	input_clear();
 	input_mouse_resume();
+	
+	SDL_PauseAudio(0);
+	
+	app.state=as_active;
+}
 
-	game_time_pause_end();
+int loop_event_callback(void *userdata,SDL_Event *event)
+{
 
-	return(FALSE);
+	switch (event->type) {
+
+		case SDL_APP_TERMINATING:
+			SDL_iOSEvent_WillTerminate();
+			return(0);
+			
+		case SDL_APP_LOWMEMORY:
+			SDL_iOSEvent_DidReceiveMemoryWarning();
+			return(0);
+			
+		case SDL_APP_WILLENTERBACKGROUND:
+			SDL_iOSEvent_WillResignActive();
+			return(0);
+			
+		case SDL_APP_DIDENTERBACKGROUND:
+			SDL_iOSEvent_DidEnterBackground();
+			return(0);
+			
+		case SDL_APP_WILLENTERFOREGROUND:
+			SDL_iOSEvent_WillEnterForeground();
+			return(0);
+			
+		case SDL_APP_DIDENTERFOREGROUND:
+			SDL_iOSEvent_DidBecomeActive();
+			return(0);
+
+	}
+	
+	return(1);
+}
+
+void loop_app_active(void)
+{
+	// loop_app_active is just blank here
+}
+
+#else
+
+	// regular computers just
+	// pause the game
+
+void loop_app_active(void)
+{
+		// only windowed versions can go inactive
+
+	if (!gl_in_window_mode()) return;
+
+		// going inactive?
+
+	if (app.state==as_active) {
+		if (input_app_active()) return;
+
+		app.state=as_inactive;
+
+		input_clear();
+		input_mouse_pause();
+		
+		SDL_PauseAudio(1);
+
+			// don't pause if this game is a host
+
+		if (net_setup.mode!=net_mode_host) game_time_pause_start();
+
+		return;
+	}
+
+		// becoming active?
+
+	if (!input_app_active()) return;
+
+	app.state=as_active;
+	
+	input_clear();
+	input_mouse_resume();
+	
+	SDL_PauseAudio(0);
+
+		// host games weren't paused
+
+	if (net_setup.mode!=net_mode_host) game_time_pause_end();
+}
+
+#endif
+
+/* =======================================================
+
+      State Loops
+      
+======================================================= */
+
+void loop_state_run(void)
+{
+	switch (server.state) {
+	
+		case gs_running:
+			if (loop_view_input()) {
+				loop_server_run();
+				loop_view_run();
+			}
+			return;
+
+		case gs_intro:
+			intro_run();
+			return;
+
+		case gs_singleplayer_option:
+			singleplayer_option_run();
+			return;
+
+		case gs_simple_save_pick:
+			simple_save_pick_run();
+			return;
+			
+		case gs_setup_game:
+			setup_game_run();
+			return;
+			
+		case gs_join:
+			join_run();
+			return;
+
+		case gs_host:
+			host_run();
+			return;
+			
+		case gs_file:
+			file_run();
+			return;
+			
+		case gs_chooser:
+			chooser_run();
+			return;
+			
+		case gs_title:
+			title_run();
+			return;
+
+		case gs_load_pause:
+			load_pause_run();
+			return;
+			
+		case gs_error:
+			error_run();
+			return;
+
+		case gs_score_limit:
+			score_limit_run();
+			return;
+			
+	}
+}
+
+void loop_state_last_close(void)
+{
+	view_clear_fps();
+	
+	switch (server.state) {
+
+		case gs_intro:
+			intro_close();
+			return;
+
+		case gs_singleplayer_option:
+			singleplayer_option_close();
+			return;
+
+		case gs_simple_save_pick:
+			simple_save_pick_close();
+			return;
+
+		case gs_setup_game:
+			setup_game_close();
+			return;
+			
+		case gs_join:
+			join_close();
+			return;
+
+		case gs_host:
+			host_close();
+			return;
+			
+		case gs_file:
+			file_close();
+			return;
+
+		case gs_chooser:
+			chooser_close();
+			return;
+			
+		case gs_title:
+			title_close();
+			return;
+
+		case gs_load_pause:
+			load_pause_close();
+			return;
+			
+		case gs_error:
+			error_close();
+			return;
+
+		case gs_score_limit:
+			score_limit_close();
+			return;
+
+	}
+}
+
+void loop_state_next_open(void)
+{
+	switch (server.state) {
+
+		case gs_intro:
+			intro_open();
+			return;
+
+		case gs_singleplayer_option:
+			singleplayer_option_open();
+			return;
+
+		case gs_simple_save_pick:
+			simple_save_pick_open();
+			return;
+
+		case gs_setup_game:
+			setup_game_open();
+			return;
+			
+		case gs_join:
+			join_open();
+			return;
+
+		case gs_host:
+			host_open();
+			return;
+			
+		case gs_file:
+			file_open();
+			return;
+
+		case gs_chooser:
+			chooser_open();
+			return;
+			
+		case gs_title:
+			title_open();
+			return;
+
+		case gs_load_pause:
+			load_pause_open();
+			return;
+			
+		case gs_error:
+			error_open();
+			return;
+
+		case gs_score_limit:
+			score_limit_open();
+			return;
+	}
 }
 
 /* =======================================================
 
-      Main App Loop Run
+      Main Loop
       
 ======================================================= */
 
 bool loop_main(char *err_str)
 {
-	int				tick,state;
+		// iOS suspended state
+		
+	if (app.state==as_suspended) {
+		input_event_pump();
+		usleep(1000);
+		return(TRUE);
+	}
 
-		// paused?
-
-	if (loop_pause()) return(TRUE);
+		// pump the input
+		// if there's an activation change, handle it
+		
+	if (input_event_pump()) {
+		loop_app_active();
+	}
+	
+	if (app.state==as_suspended) return(TRUE);
 	
 		// calculate timing
 		
-	tick=game_time_calculate();
-	
-		// clear all triggers
-		
-	story_trigger_clear();
-	title_trigger_clear();
-	chooser_trigger_clear();
-	movie_trigger_clear();
-	setup_game_trigger_clear();
-	menu_trigger_clear();
-	file_trigger_clear();
-	map_pick_trigger_clear();
-	score_limit_trigger_clear();
-	console_trigger_clear();
+	game_time_calculate();
 	
 		// clear map changes
+		// and checkpoints
 	
 	map_clear_changes();
-		
+	game_checkpoint_clear();
+
 		// run proper game state
 		
-	state=server.state;
-		
-	switch (server.state) {
+	server.next_state=server.state;
 	
-		case gs_running:
-			loop_game_run(tick);
-			break;
-			
-		case gs_intro:
-			intro_run();
-			break;
-			
-		case gs_join:
-			join_run();
-			break;
+	loop_state_run();
+	
+		// switching states
+		
+	if (server.state!=server.next_state) {
+		loop_state_last_close();
+		
+		server.last_state=server.state;
+		server.state=server.next_state;
 
-		case gs_host:
-			host_run();
-			break;
-			
-		case gs_menu:
-			menu_run();
-			break;
-			
-		case gs_chooser:
-			chooser_run();
-			break;
-			
-		case gs_setup_game:
-			setup_game_run();
-			break;
-			
-		case gs_setup_network:
-			setup_network_run();
-			break;
-			
-		case gs_file:
-			file_run();
-			break;
-			
-		case gs_story:
-			story_run();
-			break;
-			
-		case gs_title:
-			title_run();
-			break;
-			
-		case gs_movie:
-			movie_run();
-			break;
-			
-		case gs_error:
-			error_run();
-			break;
-			
-		case gs_map_pick:
-			map_pick_run();
-			break;
-
-		case gs_score_limit:
-			score_limit_run();
-			break;
-
-		case gs_console:
-			console_run();
-			break;
-			
+		loop_state_next_open();
 	}
 	
-		// map changes (never change map if in fatal error)
+		// map and checkpoint changes
+		// we need to check for state changes within
+		// the map change (like media launching)
 		
-	if (server.state!=gs_error) {
+	if (server.state==gs_running) {
 		if (map_need_rebuild()) {
+		
+			server.next_state=gs_running;
+			
 			if (!map_rebuild_changes(err_str)) return(FALSE);			// bad map changes is a fatal error
+			
+			if (server.next_state!=gs_running) {
+				server.last_state=server.state;
+				server.state=server.next_state;
+				loop_state_next_open();
+			}
+			
 		}
-	}
-	
-		// check all triggers
-		
-	story_trigger_check();
-	title_trigger_check();
-	chooser_trigger_check();
-	movie_trigger_check();
-	setup_game_trigger_check();
-	menu_trigger_check();
-	file_trigger_check();
-	map_pick_trigger_check();
-	score_limit_trigger_check();
-	console_trigger_check();
-		
-		// if we are changing state from game
-		// play to interface element, capture screen
-		// for background
 
-	if ((server.state!=gs_running) && (state==gs_running)) {
-		gui_screenshot_load();
+			// checkpoint changes
+
+		game_checkpoint_run();
 	}
 	
 	return(TRUE);
 }
+
+/* =======================================================
+
+      Dedicated Loop
+      
+======================================================= */
+
+bool loop_main_dedicated(char *err_str)
+{
+		// calculate timing
+		
+	game_time_calculate();
+	
+		// dedicated hosts can only
+		// run servers or wait on score
+		// limits (that reset game to new map)
+		
+	switch(server.state) {
+
+			// regular server running
+
+		case gs_running:
+			loop_server_run();
+			break;
+
+			// score limit wait
+
+		case gs_score_limit:
+			if (game_time_get_raw()>score_limit_get_resume_tick()) {
+				server.next_state=gs_running;
+				if (!game_host_reset(err_str)) return(FALSE);
+			}
+			break;
+
+	}
+
+		// since this is just a host
+		// let's sleep a bit so it doesn't
+		// consume all the CPU (10 milliseconds)
+
+	usleep(1000);
+	
+	return(TRUE);
+}
+

@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,40 +29,32 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "remotes.h"
-#include "weapons.h"
-#include "projectiles.h"
-#include "lights.h"
-#include "effects.h"
-#include "cameras.h"
-#include "consoles.h"
-#include "interfaces.h"
-#include "xmls.h"
-#include "video.h"
-#include "sounds.h"
-#include "inputs.h"
 
 view_type					view;
+view_render_type			view_camera_render,view_node_render;
 render_info_type			render_info;
 
 extern map_type				map;
 extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
-extern hud_type				hud;
 extern network_setup_type	net_setup;
+extern file_path_setup_type	file_path_setup;
 
 extern void game_file_initialize(void);
 extern void menu_input(void);
 extern void file_input(void);
 extern void debug_input(void);
-extern void view_run(int tick);
-extern void view_draw(int tick);
-extern int game_time_get(void);
+extern void view_draw(void);
 extern void chat_clear_messages(void);
-extern bool fog_solid_on(void);
-extern bool shadow_initialize(char *err_str);
+extern bool shadow_initialize(void);
 extern void shadow_shutdown(void);
+extern void menu_draw(void);
+extern bool cocoa_is_ipad(void);
+
+extern int loop_event_callback(void *userdata,SDL_Event *event);
 
 /* =======================================================
 
@@ -75,25 +67,34 @@ bool view_memory_allocate(void)
 		// initialize pointers
 		
 	view.images=NULL;
-	view.shaders=NULL;
 	view.rain_draws=NULL;
+	view.chat.lines=NULL;
+	view.console.lines=NULL;
 	
 		// view pointers
 
 	view.images=(view_image_type*)malloc(max_view_image*sizeof(view_image_type));
 	if (view.images==NULL) return(FALSE);
-	
-	view.shaders=(view_shader_type*)malloc(max_view_shader*sizeof(view_shader_type));
-	if (view.shaders==NULL) return(FALSE);
 
 	view.rain_draws=(rain_draw_type*)malloc(max_rain_density*sizeof(rain_draw_type));
 	if (view.rain_draws==NULL) return(FALSE);
 	
+	view.chat.lines=(view_chat_line_type*)malloc(max_view_chat_lines*sizeof(view_chat_line_type));
+	if (view.chat.lines==NULL) return(FALSE);
+	
+	view.console.lines=(view_console_line_type*)malloc(max_view_console_lines*sizeof(view_console_line_type));
+	if (view.console.lines==NULL) return(FALSE);
+
 		// clear pointers
 
 	bzero(view.images,(max_view_image*sizeof(view_image_type)));
-	bzero(view.shaders,(max_view_shader*sizeof(view_shader_type)));
 	bzero(view.rain_draws,(max_rain_density*sizeof(rain_draw_type)));
+	bzero(view.chat.lines,(max_view_chat_lines*sizeof(view_chat_line_type)));
+	bzero(view.console.lines,(max_view_console_lines*sizeof(view_console_line_type)));
+
+		// no utility VBOs yet
+
+	view_initialize_utility_vertex_object();
 			
 	return(TRUE);
 }
@@ -101,8 +102,9 @@ bool view_memory_allocate(void)
 void view_memory_release(void)
 {
 	if (view.images!=NULL) free(view.images);
-	if (view.shaders!=NULL) free(view.shaders);
 	if (view.rain_draws!=NULL) free(view.rain_draws);
+	if (view.chat.lines!=NULL) free(view.chat.lines);
+	if (view.console.lines!=NULL) free(view.console.lines);
 }
 
 /* =======================================================
@@ -113,47 +115,42 @@ void view_memory_release(void)
 
 void view_create_screen_size_list(void)
 {
-	int				n,k,i,nscreen_size;
+	int				n,k,i,nmode;
 	float			ratio;
 	bool			hit;
-	SDL_Rect		**modes;
-		
-	modes=SDL_ListModes(NULL,SDL_OPENGL|SDL_FULLSCREEN);
+	SDL_DisplayMode	mode;
+	
+	nmode=SDL_GetNumDisplayModes(0);
 	
 		// if no modes, then 640x480 is the only mode
 		
-	if ((modes==(SDL_Rect**)0) || (modes==(SDL_Rect**)-1)) {
+	if (nmode==0) {
 		render_info.screen_sizes[0].wid=640;
 		render_info.screen_sizes[0].high=480;
 		render_info.nscreen_size=1;
 		return;
 	}
 	
-		// get mode count
-		
-	nscreen_size=0;
-	while (modes[nscreen_size]!=0) {
-		nscreen_size++;
-	}
-	
 		// create screen list
 		
 	k=0;
 	
-	for (n=(nscreen_size-1);n>=0;n--) {
+	for (n=(nmode-1);n>=0;n--) {
+	
+		SDL_GetDisplayMode(0,n,&mode);
 
 			// knock out any less than 640x480 or when height >= width
 
-		if (modes[n]->w<640) continue;
-		if (modes[n]->h<480) continue;
-		if (modes[n]->h>=modes[n]->w) continue;
+		if (mode.w<640) continue;
+		if (mode.h<480) continue;
+		if (mode.h>=mode.w) continue;
 
 			// is this screen already in list?
 
 		hit=FALSE;
 
 		for (i=0;i!=k;i++) {
-			if ((render_info.screen_sizes[i].wid==modes[n]->w) && (render_info.screen_sizes[i].high==modes[n]->h)) {
+			if ((render_info.screen_sizes[i].wid==mode.w) && (render_info.screen_sizes[i].high==mode.h)) {
 				hit=TRUE;
 				break;
 			}
@@ -164,10 +161,10 @@ void view_create_screen_size_list(void)
 			// then 1:85:1 (0.54)
 
 		if (!hit) {
-			ratio=(float)modes[n]->h/(float)modes[n]->w;
+			ratio=(float)mode.h/(float)mode.w;
 			if ((ratio>=0.54) && (ratio<=0.75f)) {
-				render_info.screen_sizes[k].wid=modes[n]->w;
-				render_info.screen_sizes[k].high=modes[n]->h;
+				render_info.screen_sizes[k].wid=mode.w;
+				render_info.screen_sizes[k].high=mode.h;
 
 				k++;
 				if (k>=max_screen_size) break;
@@ -178,17 +175,6 @@ void view_create_screen_size_list(void)
 	render_info.nscreen_size=k;
 }
 
-int view_search_screen_size_list(int wid,int high)
-{
-	int				n;
-	
-	for (n=0;n!=render_info.nscreen_size;n++) {
-		if ((render_info.screen_sizes[n].wid==wid) && (render_info.screen_sizes[n].high==high)) return(n);
-	}
-	
-	return(-1);
-}
-
 /* =======================================================
 
       View Initialize and Shutdown Display
@@ -197,16 +183,28 @@ int view_search_screen_size_list(int wid,int high)
 
 bool view_initialize_display(char *err_str)
 {
+	int				n;
+	bool			ok;
+
 		// is screen size legal?
+		// if not, go back to default
 		
-	if (view_search_screen_size_list(setup.screen_wid,setup.screen_high)==-1) {
-		setup.screen_wid=640;
-		setup.screen_high=480;
+	if (setup.screen_wid!=-1) {
+		ok=FALSE;
+			
+		for (n=0;n!=render_info.nscreen_size;n++) {
+			if ((render_info.screen_sizes[n].wid==setup.screen_wid) && (render_info.screen_sizes[n].high==setup.screen_high)) {
+				ok=TRUE;
+				break;
+			}
+		}
+		
+		if (!ok) setup.screen_wid=setup.screen_high=-1;
 	}
-	
+
 		// start openGL
 		
-	if (!gl_initialize(setup.screen_wid,setup.screen_high,setup.lock_fps_refresh,setup.fsaa_mode,FALSE,err_str)) {
+	if (!gl_initialize(setup.screen_wid,setup.screen_high,setup.fsaa_mode,err_str)) {
 		view_memory_release();
 		SDL_Quit();
 		return(FALSE);
@@ -215,13 +213,38 @@ bool view_initialize_display(char *err_str)
 		// fix some OpenGL settings if not supported by card
 
 	if (!gl_check_fsaa_ok()) setup.fsaa_mode=fsaa_mode_none;
-	if (!gl_check_texture_compress_ok()) setup.texture_compression=FALSE;
-	if (!gl_check_texture_anisotropic_filter_ok()) setup.anisotropic_mode=anisotropic_mode_none;
+
+		// utility vbo for a couple things
+		// like primitives and bitmaps
+
+	view_create_utility_vertex_object();
+
+		// shadows
+
+	if (!shadow_initialize()) {
+		strcpy(err_str,"Out of Memory");
+		gl_shutdown();
+		SDL_Quit();
+		return(FALSE);
+	}
 	
 		// start the shaders
 		
-	read_settings_shader();
-	if (!gl_shader_initialize(err_str)) {
+	gl_shader_initialize();
+
+	if (!gl_simple_shader_initialize(err_str)) {
+		gl_shutdown();
+		SDL_Quit();
+		return(FALSE);
+	}
+
+	if (!gl_core_shader_initialize(err_str)) {
+		gl_shutdown();
+		SDL_Quit();
+		return(FALSE);
+	}
+		
+	if (!gl_user_shader_initialize(err_str)) {
 		gl_shutdown();
 		SDL_Quit();
 		return(FALSE);
@@ -233,37 +256,19 @@ bool view_initialize_display(char *err_str)
 	
 		// back renderer
 		
-	if (!gl_back_render_initialize(err_str)) {
-		gl_text_shutdown();
-		gl_shutdown();
-		view_memory_release();
-		SDL_Quit();
-		return(FALSE);
-	}
-
-		// shadows
-
-	if (!shadow_initialize(err_str)) {
-		gl_back_render_shutdown();
-		gl_text_shutdown();
-		gl_shutdown();
-		view_memory_release();
-		SDL_Quit();
-		return(FALSE);
-	}
-
-		// vertex objects
-	
-	view_create_vertex_objects();
+	gl_back_render_initialize();
 
 	return(TRUE);
 }
 
 void view_shutdown_display(void)
 {
-	view_dispose_vertex_objects();
+	view_dispose_utility_vertex_object();
+
 	shadow_shutdown();
-	gl_shader_shutdown();
+	gl_simple_shader_shutdown();
+	gl_core_shader_shutdown();
+	gl_user_shader_shutdown();
 	gl_back_render_shutdown();
 	gl_text_shutdown();
 	gl_shutdown();
@@ -283,10 +288,11 @@ bool view_reset_display(char *err_str)
 
 bool view_initialize(char *err_str)
 {
-	int				rate;
-	
+	int						tick;
+	SDL_DisplayMode			sdl_mode;
+
 		// clear view structure
-		
+
 	memset(&view,0x0,sizeof(view_type));
 
 		// allocate memory
@@ -305,6 +311,41 @@ bool view_initialize(char *err_str)
 		return(FALSE);
 	}
 	
+		// fix resolution if no switch is on
+		// mobile platforms always turn off resolution switching
+		
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+	iface.setup.no_resolution_switch=TRUE;
+#endif
+
+	if ((iface.setup.no_resolution_switch) && (!setup.window)) {
+		setup.screen_wid=setup.screen_high=-1;
+	}
+
+		// determine and cache the
+		// device type
+
+#ifdef D3_OS_IPHONE
+	if (cocoa_is_ipad()) {
+		view.device_type=device_type_pad;
+	}
+	else {
+		view.device_type=device_type_phone;
+	}
+#else
+	#ifdef D3_OS_ANDRIOD
+		view.device_type=device_type_phone;
+	#else
+		view.device_type=device_type_pc;
+	#endif
+#endif
+
+		// get desktop screen size
+		
+	SDL_GetDesktopDisplayMode(0,&sdl_mode);
+	render_info.desktop.wid=sdl_mode.w;
+	render_info.desktop.high=sdl_mode.h;
+
 		// create screen sizes
 		
 	view_create_screen_size_list();
@@ -314,7 +355,7 @@ bool view_initialize(char *err_str)
 	if (!view_initialize_display(err_str)) return(FALSE);
 
 		// sound initialize
-		
+	
 	if (!al_initialize(err_str)) {
 		view_shutdown_display();
 		view_memory_release();
@@ -326,37 +367,69 @@ bool view_initialize(char *err_str)
 	al_music_set_volume(setup.music_volume);
 	al_music_set_state(setup.music_on);
 	
-		// read in the sounds
+		// if iOS, then make sure to
+		// setup event capture so we can respond to
+		// correct events
 		
-	read_settings_sound();
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+	SDL_SetEventFilter(loop_event_callback,0);
+#endif
+	
+		// intialize the view bitmap lists
+		
+	view_images_initialize();
+	
+		// load the sounds
+		
+	al_load_all_xml_sounds();
 	
 		// connect the input
 		
-	read_settings_action();
-	
 	input_initialize(gl_in_window_mode());
 	setup_to_input();
 	
-		// draw timing
+		// hook up current render
+		// to camera render -- some routines like face
+		// forward need this to be valid
 		
-	view.time.input_tick=game_time_get();
-	view.time.draw_tick=game_time_get();
+	view.render=&view_camera_render;
+
+		// states
+
+	view.menu.active=FALSE;
+	view.score.on=FALSE;
 	
-	rate=render_info.monitor_refresh_rate;
-	if (!setup.lock_fps_refresh) rate=max_fps;
+	chat_clear_messages();
 	
-	if (rate>max_fps) rate=max_fps;
-	view.time.draw_time=1000/rate;
+		// preloaded models
+		
+	model_preload_start();
+	
+		// draw and input timing
+		// we use raw timing so input and
+		// view can work through pauses
+		
+	tick=game_time_get_raw();
+
+	view.time.input_tick=tick;
+	view.time.draw_tick=tick;
+	
+	view.time.draw_time=1000/render_info.monitor_refresh_rate;
 	
 	return(TRUE);
 }
 
 void view_shutdown(void)
 {
+		// clear all preloaded models
+		
+	model_preload_free();
+	
 		// shutdown view
 
 	input_shutdown();
 	al_shutdown();
+	view_images_shutdown();
 	view_shutdown_display();
 
 		// shutdown SDL
@@ -374,9 +447,11 @@ void view_shutdown(void)
       
 ======================================================= */
 
-void view_game_start(void)
+bool view_game_start(char *err_str)
 {
 		// cameras and globals
+
+	progress_update();
 		
     camera_initialize();
 	game_file_initialize();
@@ -384,7 +459,10 @@ void view_game_start(void)
 		// load images for hud bitmaps, radar, particles,
 		// rings, halos, marks, crosshairs and remote icons
 	
-	view_images_load();
+	progress_update();
+	view_images_cached_load();
+
+	progress_update();
 
 		// precalculate particles
 
@@ -393,6 +471,12 @@ void view_game_start(void)
 		// clear chat messages
 		
 	chat_clear_messages();
+
+		// turn off any checkpoint HUD items
+
+	hud_checkpoint_show(FALSE);
+
+	return(TRUE);
 }
 
 void view_game_stop(void)
@@ -404,7 +488,48 @@ void view_game_stop(void)
 		// free images for hud bitmaps, radar, particles,
 		// rings, halos, marks, crosshairs and remote icons
 	
-	view_images_free();
+	view_images_cached_free();
+}
+
+/* =======================================================
+
+      Reset Timing when Loading Saved Game
+      
+======================================================= */
+
+void view_game_reset_timing(void)
+{
+	int			tick;
+	
+	tick=game_time_get_raw();
+
+	view.time.input_tick=tick;
+	view.time.draw_tick=tick;
+}
+
+/* =======================================================
+
+      View Wide Check
+      
+======================================================= */
+
+bool view_file_paths_bitmap_check_wide(char *path,char *dir,char *name)
+{
+	char			name2[256];
+	struct stat		sb;
+	
+		// check for wide
+		
+	if (view.screen.wide) {
+		sprintf(name2,"%s_wide",name);
+		file_paths_data(&file_path_setup,path,dir,name2,"png");
+		if (stat(path,&sb)!=-1) return(TRUE);
+	}
+	
+		// fall back to standard
+		
+	file_paths_data(&file_path_setup,path,dir,name,"png");
+	return(stat(path,&sb)!=-1);
 }
 
 /* =======================================================
@@ -413,20 +538,21 @@ void view_game_stop(void)
       
 ======================================================= */
 
-void view_loop_input(int tick)
+void view_loop_input(void)
 {
-		// timing
+	int				raw_tick;
+
+		// time to check input?
+		// use raw ticks so it works through pauses
 		
-	if (tick<view.time.input_tick) return;
-	view.time.input_tick=tick+input_tick_rate;
-	
-		// pump input
-		
-	input_event_pump();
+	raw_tick=game_time_get_raw();
+	if (raw_tick<view.time.input_tick) return;
+
+	view.time.input_tick=raw_tick+input_tick_rate;
 
 		// player input
 	
-	player_get_input(tick);
+	player_get_input();
 	
 		// system input
 	
@@ -438,37 +564,80 @@ void view_loop_input(int tick)
 
 /* =======================================================
 
-      View Draw for Play Loop
+      Normal Playing View Draw
       
 ======================================================= */
 
-void view_loop_draw(int tick)
+void view_loop_draw(void)
 {
-	if (tick<view.time.draw_tick) return;
-	view.time.draw_tick=tick+view.time.draw_time;
-	
+	int			raw_tick,tick,y_add;
+
+		// time for view draw?
+		// use raw ticks so it works through pauses
+		
+	raw_tick=game_time_get_raw();
+	if ((!setup.ignore_fps_lock) && (raw_tick<view.time.draw_tick)) return;
+
+	view.time.draw_tick=raw_tick+view.time.draw_time;
+
 		// texture setup
 	
+	tick=game_time_get();
+
 	map_setup_animated_textures(&map,tick);
 	map_mesh_poly_run_shifts(&map,tick);
 
 		// start frame
 		
-	if (!fog_solid_on()) {
-		gl_frame_start(NULL);
+	gl_frame_clear(TRUE);
+	gl_shader_frame_start();
+	
+		// squish for open console
+		
+	if (view.console.on) {
+		#ifndef D3_ROTATE_VIEW
+			y_add=(int)(((float)view.screen.y_sz)*console_screen_percent);
+			gl_set_viewport(0,y_add,view.screen.x_sz,(view.screen.y_sz-y_add));
+		#else
+			y_add=(int)(((float)view.screen.y_sz)*console_screen_percent);
+			gl_set_viewport(y_add,0,(view.screen.y_sz-y_add),view.screen.x_sz);
+		#endif
 	}
-	else {
-		gl_frame_start(&map.fog.col);		// is obscuring fog on, then background = fog color
+	
+		// draw view
+
+	view_draw();
+	
+	hud_draw();
+	radar_draw();
+	network_draw();
+	metrics_draw();
+
+		// virtual controls
+		
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+	virtual_control_draw();
+#endif
+
+		// menu
+
+	menu_draw();
+
+		// restore if console open
+		// and draw console
+		
+	if (view.console.on) {
+		#ifndef D3_ROTATE_VIEW
+			gl_set_viewport(0,0,view.screen.x_sz,view.screen.y_sz);
+		#else
+			gl_set_viewport(0,0,view.screen.y_sz,view.screen.x_sz);
+		#endif
+		console_draw();
 	}
 
-		// draw frame
-		
-	view_draw(tick);
-	hud_draw(tick);
-	radar_draw(tick);
-	network_draw(tick);
+		// swap frame buffers
 	
-	gl_frame_end();
+	gl_frame_swap();
 
 	view.fps.count++;
 }
@@ -481,58 +650,11 @@ void view_loop_draw(int tick)
 
 void view_capture_draw(char *path)
 {
-	int			tick;
+	gl_frame_clear(FALSE);
+	gl_shader_frame_start();
 
-	tick=game_time_get();
+	view_draw();
 
-	gl_frame_start(NULL);
-	view_draw(tick);
-	
-	gl_screen_shot(render_info.view_x,render_info.view_y,setup.screen.x_sz,setup.screen.y_sz,TRUE,path);
+	gl_screen_shot(0,0,view.screen.x_sz,view.screen.y_sz,TRUE,path);
 }
 
-/* =======================================================
-
-      View Pause Draw
-      
-======================================================= */
-
-void view_pause_draw(void)
-{
-	d3col		col;
-
-	gl_frame_start(NULL);
-
-	gl_2D_view_screen();
-
-	col.r=col.g=col.b=1.0f;
-			
-	gl_text_start(hud.font.text_size_small);
-	gl_text_draw(2,(setup.screen.y_sz-2),"[paused]",tx_left,FALSE,&col,1.0f);
-	gl_text_draw((setup.screen.x_sz-2),(setup.screen.y_sz-2),"[click to resume]",tx_right,FALSE,&col,1.0f);
-	gl_text_end();
-	
-	gl_frame_end();
-}
-
-/* =======================================================
-
-      View Loop
-      
-======================================================= */
-
-void view_loop(int tick)
-{
-		// run the input
-		
-	view_loop_input(tick);
-	
-		// early exit from input changing state
-		
-	if ((server.state!=gs_running) && (server.state!=gs_score_limit)) return;
-		
-		// run the view
-		
-	view_run(tick);
-	view_loop_draw(tick);
-}

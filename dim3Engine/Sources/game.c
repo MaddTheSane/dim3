@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,24 +29,18 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "network.h"
-#include "objects.h"
-#include "projectiles.h"
-#include "effects.h"
-#include "consoles.h"
-#include "interfaces.h"
 #include "scripts.h"
+#include "objects.h"
 
+extern app_type				app;
+extern map_type				map;
 extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
 extern network_setup_type	net_setup;
 
-extern void game_time_pause_start(void);
-extern void game_time_pause_end(void);
-extern bool server_game_start(char *game_script_name,int skill,network_reply_join_remotes *remotes,char *err_str);
-extern void server_game_stop(void);
-extern void view_game_start(void);
-extern void view_game_stop(void);
 extern void net_host_game_end(void);
 
 /* =======================================================
@@ -55,11 +49,13 @@ extern void net_host_game_end(void);
       
 ======================================================= */
 
-bool game_start(int skill,network_reply_join_remotes *remotes,char *err_str)
+bool game_start(bool in_file_load,int skill,int option_flags,int simple_save_idx,char *err_str)
 {
 		// pause time
 		
 	game_time_pause_start();
+
+	progress_initialize(NULL);
 	
 		// reset random numbers
 		
@@ -68,24 +64,34 @@ bool game_start(int skill,network_reply_join_remotes *remotes,char *err_str)
 		// start progress
 	
 	console_add_system("Starting Game");
-		
-	progress_initialize("Starting");
-	progress_draw(0);
 
 		// start server
-	
-	if (!server_game_start("Game",skill,remotes,err_str)) {
+
+	progress_update();
+		
+	if (!server_game_start(in_file_load,skill,option_flags,simple_save_idx,err_str)) {
+		progress_shutdown();
 		return(FALSE);
 	}
-	
+
 		// start view
 		
-	view_game_start();
+	if (!app.dedicated_host) {
+
+		progress_update();
+
+		if (!view_game_start(err_str)) {
+			progress_shutdown();
+			return(FALSE);
+		}
+	}
 
 		// game in running state
 		
 	server.game_open=TRUE;
-	server.state=gs_running;
+	server.next_state=gs_running;
+
+	progress_shutdown();
 	
 	game_time_pause_end();
 	
@@ -95,34 +101,28 @@ bool game_start(int skill,network_reply_join_remotes *remotes,char *err_str)
 void game_end(void)
 {
 	console_add_system("Closing Game");
-	
-		// blank progress
-		
-	progress_initialize("Ending");
-	progress_draw(0);
-	
+
 		// close any network joins or hosting
 	
-	if (net_setup.client.joined) {
-		if (!net_setup.host.hosting) {
-			net_client_send_leave_host(object_player_get_remote_uid());
+	switch (net_setup.mode) {
+		case net_mode_client:
+			net_client_send_remote_remove(server.obj_list.objs[server.player_obj_idx]);
 			net_client_end_message_queue();
 			net_client_join_host_end();
-		}
-		else {
+			break;
+		case net_mode_host:
 			net_host_game_end();
-			net_client_end_message_queue_local();
-		}
+			break;
 	}
-	
+
 		// stop view
 		
-	view_game_stop();
+	if (!app.dedicated_host) view_game_stop();
 
 		// stop server
 		
 	server_game_stop();
-	
+
 		// game closed
 		
 	server.game_open=FALSE;
@@ -134,72 +134,67 @@ void game_end(void)
       
 ======================================================= */
 
-void game_reset_single_object(obj_type *obj,bool reposition)
+bool game_host_reset(char *err_str)
 {
-	spot_type		*spot;
+	int							n;
+	obj_type					*obj,*player_obj;
+	network_request_game_reset	reset;
+	
+		// switch to next map
 
-	obj->score.kill=obj->score.death=obj->score.suicide=obj->score.goal=obj->score.score=0;
-	obj->spawning=TRUE;
-	
-	obj->input_freeze=FALSE;
-	obj->death_trigger=FALSE;
-	
-	object_stop(obj);
-	
-	if (reposition) {
-		spot=script_find_network_spot(obj);
-		if (spot!=NULL) object_set_position(obj,spot->pnt.x,spot->pnt.y,spot->pnt.z,spot->ang.y,0);
+	net_setup.host.current_map_idx++;
+	if (net_setup.host.current_map_idx>=setup.network.map_list.count) net_setup.host.current_map_idx=0;
+
+	strcpy(map.info.name,setup.network.map_list.maps[net_setup.host.current_map_idx].name);
+	map.info.player_start_name[0]=0x0;
+
+	if (!map_rebuild_changes(err_str)) {
+		game_end();
+		return(FALSE);
 	}
-	
-	object_spawn(obj);
-}
 
-void game_reset(void)
-{
-	int				n;
-	obj_type		*obj;
-	
-		// reset projectiles, effects, etc
+		// all objects will be re-spawned when the new map
+		// loads.  We setup the next spawn to be a game
+		// reset and clear the scores
 		
-	projectile_start();
-	effect_start();
-	
-		// if a remote player, then just reset yourself and
-		// hide all other players until and update
+		// remotes get hidden (until the next update)
+		// the respawn just to update any lists or items
+		// before the client sends in it's next packet
 		
-	if (!net_setup.host.hosting) {
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
 	
-		obj=server.objs;
-
-		for (n=0;n!=server.count.obj;n++) {
-			if (obj->uid==server.player_obj_uid) {
-				game_reset_single_object(obj,FALSE);
-			}
-			else {
-				if ((obj->player) || (obj->remote.on) || (obj->bot)) {
-					obj->hidden=TRUE;
-				}
-			}
-			
-			obj++;
+		switch (obj->type) {
+		
+			case object_type_player:
+			case object_type_bot_multiplayer:
+				object_score_reset(obj);
+				obj->next_spawn_sub_event=sd_event_spawn_game_reset;
+				break;
+				
+			case object_type_remote_player:
+				object_score_reset(obj);
+				obj->next_spawn_sub_event=sd_event_spawn_game_reset;
+				obj->hidden=TRUE;
+				break;
+				
+			case object_type_remote_object:
+				obj->next_spawn_sub_event=sd_event_spawn_game_reset;
+				obj->hidden=TRUE;
+				break;
+				
 		}
-	
-		return;
 	}
-	
-		// force all players and bots to respawn
 
-	obj=server.objs;
+		// signal remotes to reset
 
-	for (n=0;n!=server.count.obj;n++) {
-		if ((obj->player) || (obj->bot)) game_reset_single_object(obj,TRUE);
-		obj++;
-	}
-	
-		// force all remotes to update
-		
-	obj=object_find_uid(server.player_obj_uid);
-	net_host_player_send_others_packet(obj->remote.uid,net_action_request_game_reset,NULL,0);
+	strcpy(reset.map_name,map.info.name);
+
+	player_obj=server.obj_list.objs[server.player_obj_idx];
+	net_host_player_send_message_to_clients_all(NULL,net_action_request_game_reset,(unsigned char*)&reset,sizeof(network_request_game_reset));
+
+	return(TRUE);
 }
 
 

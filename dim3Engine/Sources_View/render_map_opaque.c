@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,234 +29,13 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "lights.h"
-#include "effects.h"
-#include "consoles.h"
-#include "video.h"
-
-extern bool				dim3_debug;
+#include "interface.h"
 
 extern map_type			map;
 extern server_type		server;
 extern setup_type		setup;
 extern camera_type		camera;
 extern view_type		view;
-
-extern int game_time_get(void);
-extern bool fog_solid_on(void);
-extern void view_compile_gl_list_attach(void);
-extern void view_compile_gl_list_attach_uv_normal(void);
-extern void view_compile_gl_list_attach_uv_glow(void);
-extern void view_compile_gl_list_enable_color(void);
-extern void view_compile_gl_list_disable_color(void);
-extern void view_compile_gl_list_dettach(void);
-		
-/* =======================================================
-
-      Opaque Map Shaders
-      
-======================================================= */
-
-void render_opaque_mesh_simple(void)
-{
-	int							n,k;
-	bool						enable;
-	GLuint						gl_id;
-	map_mesh_type				*mesh;
-	map_mesh_poly_type			*poly;
-	texture_type				*texture;
-	
-		// setup drawing
-
-	enable=FALSE;
-
-	gl_texture_opaque_start();
-	
-		// run through the meshes
-
-	for (n=0;n!=view.render->draw_list.count;n++) {
-
-		if (view.render->draw_list.items[n].type!=view_render_type_mesh) continue;
-
-		mesh=&map.mesh.meshes[view.render->draw_list.items[n].idx];
-
-			// skip meshes with no opaques and all non-shaders
-			// unless debug is on
-
-		if ((!mesh->draw.has_opaque) || ((!dim3_debug) && (!mesh->draw.has_no_shader))) continue;
-		
-			// run through the polys
-			
-		poly=mesh->polys;
-
-		for (k=0;k!=mesh->npoly;k++) {
-
-				// skip transparent or shader polys
-
-			if ((poly->draw.transparent_on) || ((!dim3_debug) && (poly->draw.shader_on))) {
-				poly++;
-				continue;
-			}
-
-				// time to enable color array?
-
-			if (!enable) {
-				enable=TRUE;
-				view_compile_gl_list_enable_color();
-			}
-
-				// get texture
-
-			texture=&map.textures[poly->txt_idx];
-
-			if (!gl_back_render_get_texture(poly->camera,&gl_id)) {
-				gl_id=texture->frames[poly->draw.frame].bitmap.gl_id;
-			}
-
-			gl_texture_opaque_set(gl_id);
-
-				// draw polygon
-
-			glDrawRangeElements(GL_POLYGON,poly->draw.gl_poly_index_min,poly->draw.gl_poly_index_max,poly->ptsz,GL_UNSIGNED_INT,(GLvoid*)poly->draw.gl_poly_index_offset);
-
-			poly++;
-		}
-	}
-
-		// was color array enabled?
-
-	if (enable) view_compile_gl_list_disable_color();
-
-		// end drawing
-
-	gl_texture_opaque_end();
-}
-
-void render_opaque_mesh_shader(void)
-{
-	int							n,k;
-	GLuint						gl_id;
-	map_mesh_type				*mesh;
-	map_mesh_poly_type			*poly;
-	texture_type				*texture;
-	view_glsl_light_list_type	light_list;
-
-		// setup drawing
-
-	gl_shader_draw_start();
-	
-		// run through the meshes
-
-	for (n=0;n!=view.render->draw_list.count;n++) {
-
-		if (view.render->draw_list.items[n].type!=view_render_type_mesh) continue;
-
-		mesh=&map.mesh.meshes[view.render->draw_list.items[n].idx];
-
-			// skip meshes with no shaders or opaques
-
-		if ((!mesh->draw.has_opaque) || (!mesh->draw.has_shader)) continue;
-
-			// run through the polys
-			
-		poly=mesh->polys;
-
-		for (k=0;k!=mesh->npoly;k++) {
-
-				// skip transparent or non-shader polys
-
-			if ((poly->draw.transparent_on) || (!poly->draw.shader_on)) {
-				poly++;
-				continue;
-			}
-
-				// build lights
-
-			gl_lights_build_from_poly(poly,&light_list);
-			
-				// setup shader
-
-			texture=&map.textures[poly->txt_idx];
-
-			if (!mesh->flag.hilite) {
-				gl_shader_draw_execute(texture,poly->txt_idx,poly->draw.frame,mesh->extra_txt_idx,poly->dark_factor,1.0f,&light_list);
-			}
-			else {
-				gl_shader_draw_hilite_execute(texture,poly->txt_idx,poly->draw.frame,mesh->extra_txt_idx,poly->dark_factor,1.0f,&poly->box.mid,NULL);
-			}
-
-				// fix texture if any back rendering
-
-			if (gl_back_render_get_texture(poly->camera,&gl_id)) {
-				gl_shader_texture_override(gl_id);
-			}
-
-				// draw polygon
-
-			glDrawRangeElements(GL_POLYGON,poly->draw.gl_poly_index_min,poly->draw.gl_poly_index_max,poly->ptsz,GL_UNSIGNED_INT,(GLvoid*)poly->draw.gl_poly_index_offset);
-			
-			poly++;
-		}
-	}
-
-		// end drawing
-
-	gl_shader_draw_end();
-}
-
-void render_opaque_mesh_glow(void)
-{
-	int					n,k;
-	map_mesh_type		*mesh;
-	map_mesh_poly_type	*poly;
-	texture_type		*texture;
-	
-		// setup drawing
-
-	gl_texture_glow_start();
-	
-		// run through the meshes
-
-	for (n=0;n!=view.render->draw_list.count;n++) {
-
-		if (view.render->draw_list.items[n].type!=view_render_type_mesh) continue;
-
-		mesh=&map.mesh.meshes[view.render->draw_list.items[n].idx];
-
-			// skip meshes with no glows or opaques
-
-		if ((!mesh->draw.has_opaque) || (!mesh->draw.has_glow)) continue;
-
-			// run through the polys
-
-		poly=mesh->polys;
-
-		for (k=0;k!=mesh->npoly;k++) {
-
-				// skip transparent or non-glow polys
-
-			if ((poly->draw.transparent_on) || (!poly->draw.glow_on)) {
-				poly++;
-				continue;
-			}
-
-				// get texture
-
-			texture=&map.textures[poly->txt_idx];
-
-				// draw glow
-
-			gl_texture_glow_set(texture->frames[poly->draw.frame].bitmap.gl_id,texture->frames[poly->draw.frame].glowmap.gl_id,texture->glow.current_color);
-			glDrawRangeElements(GL_POLYGON,poly->draw.gl_poly_index_min,poly->draw.gl_poly_index_max,poly->ptsz,GL_UNSIGNED_INT,(GLvoid*)poly->draw.gl_poly_index_offset);
-
-			poly++;
-		}
-	}
-
-		// end drawing
-
-	gl_texture_glow_end();
-}
 
 /* =======================================================
 
@@ -266,43 +45,89 @@ void render_opaque_mesh_glow(void)
 
 void render_map_mesh_opaque(void)
 {
+
+	int							n,k,mesh_idx,frame;
+	float						alpha;
+	bool						lighting_small;
+	GLuint						gl_id;
+	texture_type				*texture;
+	map_mesh_type				*mesh;
+	map_mesh_poly_type			*poly;
+	view_glsl_light_list_type	light_list;
+
 		// setup view
-
-	gl_3D_view();
-	gl_3D_rotate(&view.render->camera.pnt,&view.render->camera.ang);
-	gl_setup_project();
-
-		// attach map complied open gl list
-
-	view_compile_gl_list_attach();
 	
-		// common setup
-		
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
-
 	glEnable(GL_DEPTH_TEST); 
-	glDepthFunc(GL_LEQUAL);
+
+	glDisable(GL_BLEND);
+	
+		// run through draw list
+
+	for (n=0;n!=view.render->draw_list.count;n++) {
+
+		if (view.render->draw_list.items[n].type!=view_render_type_mesh) continue;
+
+			// skip meshes with no opaques
+
+		mesh_idx=view.render->draw_list.items[n].idx;
+
+		mesh=&map.mesh.meshes[mesh_idx];
+		if (!mesh->draw.has_opaque) continue;
 		
-		// opaque meshes
+			// the mesh vbo
+			
+		view_bind_mesh_liquid_vertex_object(&mesh->vbo);
+		view_bind_mesh_liquid_index_object(&mesh->vbo);
 
-	glDisable(GL_BLEND);
-	glDepthMask(GL_TRUE);
-	
-	view_compile_gl_list_attach_uv_normal();
-	render_opaque_mesh_simple();
-	if (!dim3_debug) render_opaque_mesh_shader();
-	
-	glDisable(GL_BLEND);
-	glDepthMask(GL_FALSE);
+		gl_shader_draw_execute_reset_cached_offsets();
 
-	view_compile_gl_list_attach_uv_glow();
-	render_opaque_mesh_glow();
+			// small meshes don't create light lists
+			// per-poly, instead just use the mesh list
+			// if the mesh list always has less than
+			// max shader lights, just use that
 
-	glDepthMask(GL_TRUE);
+		lighting_small=((mesh->precalc_flag.lighting_small) || (mesh->light_cache.count<=max_shader_light));
+		if (lighting_small) gl_lights_build_mesh_glsl_light_list(mesh,&light_list);
 
-		// dettach any attached lists
+			// draw the polys
 
-	view_compile_gl_list_dettach();
+		poly=mesh->polys;
+
+		for (k=0;k!=mesh->npoly;k++) {
+
+				// skip transparent or culled polys
+
+			if ((poly->draw.transparent_on) || (poly->draw.culled[view.render->cull_idx])) {
+				poly++;
+				continue;
+			}
+
+				// setup shader
+
+			texture=&map.textures[poly->txt_idx];
+			frame=(texture->animate.current_frame+poly->draw.txt_frame_offset)&max_texture_frame_mask;
+
+			if (!lighting_small) gl_lights_build_poly_glsl_light_list(mesh,poly,&light_list);
+			gl_shader_draw_execute_map_start(texture,poly->txt_idx,frame,poly->lmap_txt_idx,1.0f,0,(3*sizeof(float)),(5*sizeof(float)),(7*sizeof(float)),(10*sizeof(float)),mesh->vbo.vertex_stride,&light_list);
+
+				// fix texture if any back rendering
+
+			if (gl_back_render_get_texture(poly->camera,&gl_id,&alpha)) {
+				gl_shader_texture_override(gl_id,alpha);
+			}
+
+				// draw polygon
+				
+			glDrawElements(GL_TRIANGLE_FAN,poly->ptsz,GL_UNSIGNED_SHORT,(GLvoid*)poly->vbo.index_offset);
+			
+			gl_shader_draw_execute_map_end(texture,&light_list);
+		
+			poly++;
+			view.count.mesh_poly++;
+		}
+		
+		view_unbind_mesh_liquid_vertex_object();
+		view_unbind_mesh_liquid_index_object();
+	}
 }
 

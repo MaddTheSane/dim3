@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2006 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,9 +29,9 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "video.h"
+#include "interface.h"
 
-GLuint						back_render_fbo_id,back_render_fbo_depth_id;
+GLuint						back_render_fbo_id,back_render_fbo_depth_stencil_id;
 bool						back_render_on;
 
 extern map_type				map;
@@ -39,7 +39,7 @@ extern setup_type			setup;
 extern view_type			view;
 extern render_info_type		render_info;
 
-extern bool view_draw_node(int tick,node_type *node,int pixel_size);
+extern bool view_draw_node(node_type *node);
 
 /* =======================================================
 
@@ -47,41 +47,47 @@ extern bool view_draw_node(int tick,node_type *node,int pixel_size);
       
 ======================================================= */
 
-bool gl_back_render_initialize(char *err_str)
+void gl_back_render_initialize(void)
 {
+	GLint				old_fbo;
+	
 		// check if back rendering is enabled
 		
 	back_render_on=gl_check_frame_buffer_ok();
-	if (!back_render_on) return(TRUE);
+	if (!back_render_on) return;
 	
-		// create depth buffer object
+	glGetIntegerv(GL_FRAMEBUFFER_BINDING,&old_fbo);
 	
-	glGenTextures(1,&back_render_fbo_depth_id);
-	glBindTexture(GL_TEXTURE_2D,back_render_fbo_depth_id);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-	glTexImage2D(GL_TEXTURE_2D,0,GL_DEPTH_COMPONENT,back_render_texture_pixel_size,back_render_texture_pixel_size,0,GL_DEPTH_COMPONENT,GL_FLOAT,0);
+		// create depth buffer and stencil object
+		
+	glGenRenderbuffers(1,&back_render_fbo_depth_stencil_id);
+	glBindRenderbuffer(GL_RENDERBUFFER,back_render_fbo_depth_stencil_id);
+	glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH24_STENCIL8,back_render_texture_pixel_size,back_render_texture_pixel_size);
 
-		// create the frame buffer object and attach depth
+		// create the frame buffer object and attach depth/stencil
 
-	glGenFramebuffersEXT(1,&back_render_fbo_id);
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,back_render_fbo_id);
-	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT,GL_DEPTH_ATTACHMENT_EXT,GL_TEXTURE_2D,back_render_fbo_depth_id,0);
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,0);
+	glGenFramebuffers(1,&back_render_fbo_id);
+	glBindFramebuffer(GL_FRAMEBUFFER,back_render_fbo_id);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,back_render_fbo_depth_stencil_id);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_STENCIL_ATTACHMENT,GL_RENDERBUFFER,back_render_fbo_depth_stencil_id);
 
-	return(TRUE);
+		// some additional setup
+		
+	gl_setup_context();
+
+		// turn off framebuffer
+		
+	glBindFramebuffer(GL_FRAMEBUFFER,old_fbo);
 }
 
 void gl_back_render_shutdown(void)
 {
 	if (!back_render_on) return;
 
-		// destroy frame buffer and depth
+		// destroy frame buffer and depth/stencil
 
-	glDeleteFramebuffersEXT(1,&back_render_fbo_id);
-	glDeleteTextures(1,&back_render_fbo_depth_id);
+	glDeleteFramebuffers(1,&back_render_fbo_id);
+	glDeleteRenderbuffers(1,&back_render_fbo_depth_stencil_id);
 }
 
 /* =======================================================
@@ -130,57 +136,31 @@ void gl_back_render_map_end(void)
 
 GLuint gl_back_render_create_texture(void)
 {
-	GLuint				gl_id;
+#if !defined(D3_OS_IPHONE) && !defined(D3_OS_ANDRIOD)
+	float			max;
+#endif
+	GLuint			gl_id;
 	
 	glGenTextures(1,&gl_id);
-	glBindTexture(GL_TEXTURE_2D,gl_id);
+	gl_texture_bind(0,gl_id);
 	
 	glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,back_render_texture_pixel_size,back_render_texture_pixel_size,0,GL_RGBA,GL_UNSIGNED_BYTE,0);
 
-		// animsotropic modes
+		// mipmap
 		
-	switch (setup.anisotropic_mode) {
-	
-		case anisotropic_mode_none:
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,1.0);
-			break;
-			
-		case anisotropic_mode_low:
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,2.0);
-			break;
-			
-		case anisotropic_mode_medium:
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,4.0);
-			break;
-			
-		case anisotropic_mode_high:
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,8.0);
-			break;
-			
-	}
+	glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 
-		// mipmap modes
+		// anisotropic
 		
-	switch (setup.mipmap_mode) {
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+	glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,1.0);
+#else
+	glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT,&max);
+	glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,max);
+#endif
 	
-		case mipmap_mode_none:
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-			break;
-			
-		case mipmap_mode_bilinear:
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_NEAREST);
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-			break;
-			
-		case mipmap_mode_trilinear:
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
-			glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-			break;
-			
-	}
-	
-	glBindTexture(GL_TEXTURE_2D,0);
+	gl_texture_clear(0);
 	
 	return(gl_id);
 }
@@ -191,9 +171,10 @@ GLuint gl_back_render_create_texture(void)
       
 ======================================================= */
 
-void gl_back_render_frame_node(int tick,char *node_name)
+void gl_back_render_frame_node(char *node_name)
 {
 	int				node_idx;
+	GLint			old_fbo;
 	node_type		*node;
 
 		// get node
@@ -206,7 +187,11 @@ void gl_back_render_frame_node(int tick,char *node_name)
 		// alread rendered?
 
 	if (node->back_render.render) return;
-
+	
+		// remember old fbo and viewport
+		
+	glGetIntegerv(GL_FRAMEBUFFER_BINDING,&old_fbo);
+	
 		// need to create a texture?
 
 	if (node->back_render.txt_id==-1) {
@@ -215,39 +200,56 @@ void gl_back_render_frame_node(int tick,char *node_name)
 
 		// setup fbo
 
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,back_render_fbo_id);
-	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT,GL_COLOR_ATTACHMENT0_EXT,GL_TEXTURE_2D,node->back_render.txt_id,0);
-	glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT,GL_DEPTH_ATTACHMENT_EXT,GL_RENDERBUFFER_EXT,back_render_fbo_depth_id);
-	
-	if (glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT)!=GL_FRAMEBUFFER_COMPLETE_EXT) {
-		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,0);
+	glBindFramebuffer(GL_FRAMEBUFFER,back_render_fbo_id);
+	glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,node->back_render.txt_id,0);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,back_render_fbo_depth_stencil_id);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_STENCIL_ATTACHMENT,GL_RENDERBUFFER,back_render_fbo_depth_stencil_id);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) {
+		glBindFramebuffer(GL_FRAMEBUFFER,old_fbo);
 		return;
 	}
+	
+		// new viewport
+
+	gl_save_viewport();
+	gl_set_viewport(0,0,back_render_texture_pixel_size,back_render_texture_pixel_size);
+
 
 		// draw back buffer
-		
-	view_draw_node(tick,node,back_render_texture_pixel_size);
-	glFlush();
 
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT,0);
+	view_draw_node(node);
+	
+	glFlush();
+	
+	fprintf(stdout,"render to %s.%d\n",node_name,node->back_render.txt_id);
+	
+		// restore viewport
+	
+	gl_restore_viewport();
+	
+		// restore fbo
+		
+	glBindFramebuffer(GL_FRAMEBUFFER,old_fbo);
 
 		// generate mipmaps
 		
-	glBindTexture(GL_TEXTURE_2D,node->back_render.txt_id);
-	glGenerateMipmapEXT(GL_TEXTURE_2D);
-	glBindTexture(GL_TEXTURE_2D,0);
-	
+	gl_texture_bind(0,node->back_render.txt_id);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	gl_texture_clear(0);
+
 		// mark as rendered for this frame
 		
 	node->back_render.render=TRUE;
 }
 
-void gl_back_render_frame_start(int tick)
+void gl_back_render_frame_start(void)
 {
-	int					n,k,mesh_idx;
+	int					n,k;
 	node_type			*node;
 	map_mesh_type		*mesh;
 	map_mesh_poly_type	*poly;
+	map_liquid_type		*liq;
 	
 	if (!back_render_on) return;
 
@@ -260,19 +262,28 @@ void gl_back_render_frame_start(int tick)
 		node++;
 	}
 	
-		// run through all the meshes
+		// run through all the meshes or liquids
 	
 	for (n=0;n!=view.render->draw_list.count;n++) {
-		if (view.render->draw_list.items[n].type!=view_render_type_mesh) continue;
+		
+		switch (view.render->draw_list.items[n].type) {
+		
+			case view_render_type_mesh:
+				mesh=&map.mesh.meshes[view.render->draw_list.items[n].idx];
+				if (!mesh->precalc_flag.poly_has_camera) break;
+				
+				poly=mesh->polys;
 
-		mesh_idx=view.render->draw_list.items[n].idx;
-
-		mesh=&map.mesh.meshes[mesh_idx];
-		poly=mesh->polys;
-
-		for (k=0;k!=mesh->npoly;k++) {
-			if (poly->camera[0]!=0x0) gl_back_render_frame_node(tick,poly->camera);
-			poly++;
+				for (k=0;k!=mesh->npoly;k++) {
+					if (poly->camera[0]!=0x0) gl_back_render_frame_node(poly->camera);
+					poly++;
+				}
+				break;
+				
+			case view_render_type_liquid:
+				liq=&map.liquid.liquids[view.render->draw_list.items[n].idx];
+				if (liq->camera[0]!=0x0) gl_back_render_frame_node(liq->camera);
+				break;
 		}
 	}
 }
@@ -283,12 +294,14 @@ void gl_back_render_frame_start(int tick)
       
 ======================================================= */
 
-bool gl_back_render_get_texture(char *node_name,GLuint *txt_id)
+bool gl_back_render_get_texture(char *node_name,GLuint *txt_id,float *alpha)
 {
 	int				node_idx;
 	node_type		*node;
 	
 	if (node_name[0]==0x0) return(FALSE);
+	fprintf(stdout,"check %s\n",node_name);
+	
 
 		// get node
 		
@@ -302,7 +315,9 @@ bool gl_back_render_get_texture(char *node_name,GLuint *txt_id)
 	if (!node->back_render.render) return(FALSE);
 
 	*txt_id=node->back_render.txt_id;
+	if (alpha!=NULL) *alpha=node->alpha;
+	
+	fprintf(stdout,"draw to %d\n",node->back_render.txt_id);
+	
 	return(TRUE);
 }
-
-

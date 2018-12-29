@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,17 +29,14 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "weapons.h"
-#include "models.h"
-#include "consoles.h"
-#include "interfaces.h"
-#include "video.h"
 
 extern map_type				map;
 extern camera_type			camera;
 extern view_type			view;
 extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
 
 /* =======================================================
@@ -48,7 +45,7 @@ extern setup_type			setup;
       
 ======================================================= */
 
-void zoom_setup(int tick,obj_type *obj,weapon_type *weap)
+void zoom_setup(obj_type *obj,weapon_type *weap)
 {
 	int					tx,ty,old_x,old_y;
 	obj_zoom_draw		*zoom_draw;
@@ -73,11 +70,11 @@ void zoom_setup(int tick,obj_type *obj,weapon_type *weap)
 	
 		// iron sites effect masking
 				
-	if (tick<(zoom_draw->start_tick+weap->zoom.tick)) return;
+	if (game_time_get()<(zoom_draw->start_tick+weap->zoom.tick)) return;
 		
 		// get the zoom place
 		
-	if (!crosshair_get_location(tick,obj,weap,&tx,&ty,NULL,NULL)) return;
+	if (!crosshair_get_location(obj,weap,&tx,&ty,NULL,NULL)) return;
 	
 	zoom_draw->on=TRUE;
 	
@@ -100,9 +97,9 @@ void zoom_setup(int tick,obj_type *obj,weapon_type *weap)
 
 void zoom_draw(obj_type *obj,weapon_type *weap)
 {
-	int				x,y,sz,lft,rgt,top,bot,
-					cnt,gl_id;
-	float			*vertex_ptr,*uv_ptr;
+	int				x,y,sz,lft,rgt,top,bot;
+	GLuint			gl_id;
+	d3col			col;
 	
 		// is weapon not in zoom?
 		
@@ -118,7 +115,7 @@ void zoom_draw(obj_type *obj,weapon_type *weap)
 	x=obj->zoom_draw.x;
 	y=obj->zoom_draw.y;
 	
-	sz=setup.screen.y_sz>>1;
+	sz=view.screen.y_sz>>1;
 
 	lft=x-sz;
 	rgt=x+sz;
@@ -127,145 +124,26 @@ void zoom_draw(obj_type *obj,weapon_type *weap)
 	
 		// scope bitmap
 		
-	gl_id=view_images_get_gl_id(server.crosshairs[weap->zoom.mask_idx].image_idx);
+	gl_id=view_images_get_gl_id(iface.crosshair_list.crosshairs[weap->zoom.mask_idx].image_idx);
 	
 		// setup drawing
 		
-	gl_2D_view_screen();
-
 	glDisable(GL_BLEND);
-	glDisable(GL_ALPHA_TEST);
 	glDisable(GL_DEPTH_TEST);
-
-		// construct VBO
-
-	vertex_ptr=view_bind_map_next_vertex_object(((16*4)*(2+2)));
-	if (vertex_ptr==NULL) return;
-
-	uv_ptr=vertex_ptr+((16*4)*2);
 	
-		// border vertexes
-
-	cnt=0;
-		
-	if (lft>0) {
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)(lft+1);
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)(lft+1);
-		*vertex_ptr++=(float)setup.screen.y_sz;
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)setup.screen.y_sz;
-
-		uv_ptr+=8;
-		cnt+=4;
-	}
-	
-	if (rgt<setup.screen.x_sz) {
-		*vertex_ptr++=(float)(rgt-1);
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)setup.screen.x_sz;
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)setup.screen.x_sz;
-		*vertex_ptr++=(float)setup.screen.y_sz;
-		*vertex_ptr++=(float)(rgt-1);
-		*vertex_ptr++=(float)setup.screen.y_sz;
-
-		uv_ptr+=8;
-		cnt+=4;
-	}
-	
-	if (top>0) {
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)setup.screen.x_sz;
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)setup.screen.x_sz;
-		*vertex_ptr++=(float)(top+1);
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)(top+1);
-
-		uv_ptr+=8;
-		cnt+=4;
-	}
-	
-	if (bot<setup.screen.y_sz) {
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)(bot-1);
-		*vertex_ptr++=(float)setup.screen.x_sz;
-		*vertex_ptr++=(float)(bot-1);
-		*vertex_ptr++=(float)setup.screen.x_sz;
-		*vertex_ptr++=(float)setup.screen.y_sz;
-		*vertex_ptr++=0.0f;
-		*vertex_ptr++=(float)setup.screen.y_sz;
-
-		uv_ptr+=8;
-		cnt+=4;
-	}
-
-		// zoom bitmap vertexes
-
-	*vertex_ptr++=(float)lft;
-	*vertex_ptr++=(float)top;
-
-	*uv_ptr++=0.0f;
-	*uv_ptr++=0.0f;
-
-	*vertex_ptr++=(float)rgt;
-	*vertex_ptr++=(float)top;
-
-	*uv_ptr++=1.0f;
-	*uv_ptr++=0.0f;
-
-	*vertex_ptr++=(float)rgt;
-	*vertex_ptr++=(float)bot;
-
-	*uv_ptr++=1.0f;
-	*uv_ptr++=1.0f;
-
-	*vertex_ptr++=(float)lft;
-	*vertex_ptr++=(float)bot;
-
-	*uv_ptr++=0.0f;
-	*uv_ptr++=1.0f;
-
-  	view_unmap_current_vertex_object();
-
-		// draw border and zoom
-	
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(2,GL_FLOAT,0,(void*)0);
-
 		// borders
 
-	glColor4f(0.0f,0.0f,0.0f,1.0f);
-	glDrawArrays(GL_QUADS,0,cnt);
+	col.r=col.g=col.b=0.0f;
+		
+	if (lft>0) view_primitive_2D_color_quad(&col,1.0f,0,(lft+1),0,view.screen.y_sz);
+	if (rgt<view.screen.x_sz) view_primitive_2D_color_quad(&col,1.0f,(rgt-1),view.screen.x_sz,0,view.screen.y_sz);
+	if (top>0) view_primitive_2D_color_quad(&col,1.0f,0,view.screen.x_sz,0,(top+1));
+	if (bot<view.screen.y_sz) view_primitive_2D_color_quad(&col,1.0f,0,view.screen.x_sz,(bot-1),view.screen.y_sz);
 
 		// zoom
 
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)(((16*4)*2)*sizeof(float)));
-
-	gl_texture_simple_start();
-
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
-
-	gl_texture_simple_set(gl_id,TRUE,1.0f,1.0f,1.0f,1.0f);
-
-	glDrawArrays(GL_QUADS,cnt,4);
-
-	gl_texture_simple_end();
-
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
-
-		// unbind the vbo
-
-	view_unbind_current_vertex_object();
+	col.r=col.g=col.b=1.0f;
+	
+	view_primitive_2D_texture_quad(gl_id,&col,1.0f,lft,rgt,top,bot,0.0f,1.0f,0.0f,1.0f,TRUE);
 }
 

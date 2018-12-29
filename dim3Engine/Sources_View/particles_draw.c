@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,17 +29,13 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "weapons.h"
-#include "projectiles.h"
-#include "models.h"
-#include "lights.h"
-#include "effects.h"
-#include "video.h"
 
 extern map_type				map;
-extern server_type			server;
 extern view_type			view;
+extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
 
 /* =======================================================
@@ -56,23 +52,27 @@ model_draw* particle_draw_get_model(particle_motion *motion)
 
 		// is it a projectile?
 
-	if (motion->proj_uid!=-1) {
-		proj=projectile_find_uid(motion->proj_uid);
-		if (proj==NULL) return(NULL);
+	if (motion->proj_idx!=-1) {
+		proj=server.proj_list.projs[motion->proj_idx];
+		if (!proj->on) return(NULL);
 		return(&proj->draw);
 	}
 
 		// is it a weapon?
 
-	if (motion->weap_uid!=-1) {
-		weap=weapon_find_uid(motion->weap_uid);
+	if (motion->weap_idx!=-1) {
+		obj=server.obj_list.objs[motion->obj_idx];
+		weap=obj->weap_list.weaps[motion->weap_idx];
 		if (weap==NULL) return(NULL);
+		if (motion->weap_in_dual) return(&weap->draw_dual);
 		return(&weap->draw);
 	}
 
 		// is object
 
-	obj=object_find_uid(motion->obj_uid);
+	if (motion->obj_idx==-1) return(NULL);
+
+	obj=server.obj_list.objs[motion->obj_idx];
 	if (obj==NULL) return(NULL);
 	return(&obj->draw);
 }
@@ -83,18 +83,17 @@ model_draw* particle_draw_get_model(particle_motion *motion)
       
 ======================================================= */
 
-void particle_draw_position(effect_type *effect,int count,int *x,int *y,int *z)
+void particle_draw_position(effect_type *effect,int count,d3pnt *pnt)
 {
-	int						mx,my,mz;
 	float					f_tick;
 	model_draw				*draw;
 	particle_effect_data	*eff_particle;
 
 		// position
 	
-	mx=effect->pnt.x;
-	my=effect->pnt.y;
-	mz=effect->pnt.z;
+	pnt->x=effect->pnt.x;
+	pnt->y=effect->pnt.y;
+	pnt->z=effect->pnt.z;
 
 	eff_particle=&effect->data.particle;
 
@@ -102,21 +101,17 @@ void particle_draw_position(effect_type *effect,int count,int *x,int *y,int *z)
 
 	if (eff_particle->motion.bone_idx!=-1) {
 		draw=particle_draw_get_model(&eff_particle->motion);
-		if (draw!=NULL) model_find_bone_position_for_current_animation(draw,eff_particle->motion.bone_idx,&mx,&my,&mz);
+		if (draw!=NULL) model_get_last_draw_bone_position(draw,eff_particle->motion.bone_idx,pnt);
 	}
 
 		// motion
 
 	else {
 		f_tick=((float)count)/10.0f;
-		mx+=(int)(eff_particle->motion.vct.x*f_tick);
-		my+=(int)(eff_particle->motion.vct.y*f_tick);
-		mz+=(int)(eff_particle->motion.vct.z*f_tick);
+		pnt->x+=(int)(eff_particle->motion.vct.x*f_tick);
+		pnt->y+=(int)(eff_particle->motion.vct.y*f_tick);
+		pnt->z+=(int)(eff_particle->motion.vct.z*f_tick);
 	}
-
-	*x=mx;
-	*y=my;
-	*z=mz;
 }
 
 /* =======================================================
@@ -125,19 +120,17 @@ void particle_draw_position(effect_type *effect,int count,int *x,int *y,int *z)
       
 ======================================================= */
 
-int particle_fill_array_quad_single(float *vertex_ptr,int idx,int nvertex,int mx,int my,int mz,d3ang *rot_ang,float pixel_size,matrix_type *mat_x,matrix_type *mat_y,float gravity,int count,int particle_count,particle_piece_type *pps,float gx,float gy,float g_size)
+int particle_fill_array_quad_single(float *vertex_ptr,int idx,int nvertex,d3pnt *pnt,d3ang *rot_ang,float pixel_size,matrix_type *pixel_x_mat,matrix_type *pixel_y_mat,float gravity,float f_count,int particle_count,iface_particle_piece_type *pps,float gx,float gy,float g_size)
 {
 	int					n,k;
-	float				fx,fy,fz,f_count,px[4],py[4],pz[4];
-	float				*pv,*pt;
-	matrix_type			rot_x_mat,rot_z_mat,rot_y_mat;
+	float				fx,fy,fz,px[4],py[4],pz[4];
+	float				*pf;
+	matrix_type			rot_mat;
 	
 		// if move angle, setup matrixes
 		
 	if (rot_ang!=NULL) {
-		matrix_rotate_x(&rot_x_mat,rot_ang->x);
-		matrix_rotate_z(&rot_z_mat,rot_ang->z);
-		matrix_rotate_y(&rot_y_mat,rot_ang->y);
+		matrix_rotate_xzy(&rot_mat,rot_ang->x,rot_ang->y,rot_ang->z);
 	}
 	
 		// get particle box
@@ -149,16 +142,13 @@ int particle_fill_array_quad_single(float *vertex_ptr,int idx,int nvertex,int mx
 	pz[0]=pz[1]=pz[2]=pz[3]=0.0f;
 	
 	for (k=0;k!=4;k++) {
-		matrix_vertex_multiply(mat_x,&px[k],&py[k],&pz[k]);
-		matrix_vertex_multiply(mat_y,&px[k],&py[k],&pz[k]);
+		matrix_vertex_multiply_ignore_transform(pixel_x_mat,&px[k],&py[k],&pz[k]);
+		matrix_vertex_multiply_ignore_transform(pixel_y_mat,&px[k],&py[k],&pz[k]);
 	}
 	
 		// fill particle arrays
 	
-	pv=vertex_ptr+(idx*3);
-	pt=vertex_ptr+(nvertex*3)+(idx*2);
-	
-	f_count=(float)count;
+	pf=vertex_ptr+(idx*(3+2));
 	
 	for (n=0;n!=particle_count;n++) {
 	
@@ -169,49 +159,49 @@ int particle_fill_array_quad_single(float *vertex_ptr,int idx,int nvertex,int mx
 			fy=pps->vct.y;
 			fz=pps->vct.z;
 			
-			matrix_vertex_multiply(&rot_x_mat,&fx,&fy,&fz);
-			matrix_vertex_multiply(&rot_z_mat,&fx,&fy,&fz);
-			matrix_vertex_multiply(&rot_y_mat,&fx,&fy,&fz);
+			matrix_vertex_multiply_ignore_transform(&rot_mat,&fx,&fy,&fz);
 		
-			fx=(float)(mx+pps->pt.x)+(fx*f_count);
-			fy=(float)(my+pps->pt.y)+((fy*f_count)+gravity);
-			fz=(float)(mz+pps->pt.z)+(fz*f_count);
+			fx=(float)(pnt->x+pps->pt.x)+(fx*f_count);
+			fy=(float)(pnt->y+pps->pt.y)+((fy*f_count)+gravity);
+			fz=(float)(pnt->z+pps->pt.z)+(fz*f_count);
 		}
 		else {							// normal particles
-			fx=(float)(mx+pps->pt.x)+((pps->vct.x)*f_count);
-			fy=(float)(my+pps->pt.y)+(((pps->vct.y)*f_count)+gravity);
-			fz=(float)(mz+pps->pt.z)+((pps->vct.z)*f_count);
+			fx=(float)(pnt->x+pps->pt.x)+((pps->vct.x)*f_count);
+			fy=(float)(pnt->y+pps->pt.y)+(((pps->vct.y)*f_count)+gravity);
+			fz=(float)(pnt->z+pps->pt.z)+((pps->vct.z)*f_count);
 		}
 		
 		pps++;
 
-		*pv++=(px[0]+fx);
-		*pv++=(py[0]+fy);
-		*pv++=(pz[0]+fz);
-		
-		*pt++=gx;
-		*pt++=gy;
+			// the quad
 
-		*pv++=(px[1]+fx);
-		*pv++=(py[1]+fy);
-		*pv++=(pz[1]+fz);
+		*pf++=(px[0]+fx);
+		*pf++=(py[0]+fy);
+		*pf++=(pz[0]+fz);
 		
-		*pt++=gx+g_size;
-		*pt++=gy;
+		*pf++=gx;
+		*pf++=gy;
 
-		*pv++=(px[2]+fx);
-		*pv++=(py[2]+fy);
-		*pv++=(pz[2]+fz);
+		*pf++=(px[1]+fx);
+		*pf++=(py[1]+fy);
+		*pf++=(pz[1]+fz);
 		
-		*pt++=gx+g_size;
-		*pt++=gy+g_size;
+		*pf++=gx+g_size;
+		*pf++=gy;
 
-		*pv++=(px[3]+fx);
-		*pv++=(py[3]+fy);
-		*pv++=(pz[3]+fz);
+		*pf++=(px[2]+fx);
+		*pf++=(py[2]+fy);
+		*pf++=(pz[2]+fz);
 		
-		*pt++=gx;
-		*pt++=gy+g_size;
+		*pf++=gx+g_size;
+		*pf++=gy+g_size;
+
+		*pf++=(px[3]+fx);
+		*pf++=(py[3]+fy);
+		*pf++=(pz[3]+fz);
+		
+		*pf++=gx;
+		*pf++=gy+g_size;
 
 			// change particle image
 		
@@ -236,31 +226,33 @@ int particle_fill_array_quad_single(float *vertex_ptr,int idx,int nvertex,int mx
       
 ======================================================= */
 
-void particle_draw(effect_type *effect,int count)
+void particle_draw(effect_type *effect,int count,int image_offset)
 {
-	int						i,idx,particle_count,nvertex,
-							ntrail,trail_step,mx,mz,my,
-							pixel_dif;
-	float					gravity,gx,gy,g_size,pixel_sz,f,pc[3],
+	int						n,idx,particle_count,ntot_count,nvertex,nindex,
+							ntrail,pixel_dif;
+	float					gravity,gx,gy,g_size,pixel_sz,f,pc[3],trail_step,
 							alpha,alpha_dif,color_dif,f_count,f_tick;
 	float					*vertex_ptr;
+	unsigned short			*index_ptr;
+	unsigned short			v_idx;
+	d3pnt					pnt;
 	d3ang					*rot_ang,rang;
 	d3col					col,ambient_col;
-	particle_type			*particle;
+	iface_particle_type		*particle;
 	particle_effect_data	*eff_particle;
-	matrix_type				pixel_mat_x,pixel_mat_y;
-
+	matrix_type				pixel_x_mat,pixel_y_mat;
+	
 	eff_particle=&effect->data.particle;
-	particle=&server.particles[eff_particle->particle_idx];
+	particle=&iface.particle_list.particles[eff_particle->particle_idx];
 
 	f_count=(float)count;
 
 		// position
 	
-	particle_draw_position(effect,count,&mx,&my,&mz);
+	particle_draw_position(effect,count,&pnt);
 
 	if (particle->ambient_factor!=1.0f) {		// get ambient before position change
-		gl_lights_calc_vertex((double)mx,(double)my,(double)mz,pc);
+		gl_lights_calc_color((float)pnt.x,(float)pnt.y,(float)pnt.z,pc);
 		ambient_col.r=pc[0];
 		ambient_col.g=pc[1];
 		ambient_col.b=pc[2];
@@ -301,10 +293,10 @@ void particle_draw(effect_type *effect,int count)
 		rot_ang->z=angle_add(rot_ang->z,f);
 	}
 
-		// particle sprite rotation
-
-	matrix_rotate_x(&pixel_mat_x,view.render->camera.ang.x);
-	matrix_rotate_y(&pixel_mat_y,view.render->camera.ang.y);
+		// particle billboard rotation
+		
+	matrix_rotate_x(&pixel_x_mat,view.render->camera.ang.x);
+	matrix_rotate_y(&pixel_y_mat,view.render->camera.ang.y);
 	
 		// reverse
 		
@@ -333,10 +325,6 @@ void particle_draw(effect_type *effect,int count)
 	color_dif=particle->end_color.b-particle->start_color.b;
     col.b=particle->start_color.b+((color_dif*f_count)/f_tick);
 
-	col.r*=eff_particle->tint.r;
-	col.g*=eff_particle->tint.g;
-	col.b*=eff_particle->tint.b;
-
 	if (particle->ambient_factor!=1.0f) {
 		col.r=(col.r*particle->ambient_factor)+((1.0f-particle->ambient_factor)*ambient_col.r);
 		if (col.r>1.0f) col.r=1.0f;
@@ -350,28 +338,41 @@ void particle_draw(effect_type *effect,int count)
 	
 		// setup images
 		
-	effect_image_animate_get_uv(count,&particle->animate,&gx,&gy,&g_size);
+	effect_image_animate_get_uv(count,image_offset,&particle->animate,&gx,&gy,&g_size);
 
 		// reduce x/z/y movement and add in offset
 		
 	count=count/10;
 
 		// construct VBO
+		// effect vbos are dynamic, so it'll auto construct
+		// the first time called
 
-	nvertex=(particle->count*(particle->trail_count+1))*4;
+	ntot_count=particle->count*(particle->trail_count+1);
 
-	vertex_ptr=view_bind_map_next_vertex_object((nvertex*(3+2)));
-	if (vertex_ptr==NULL) return;
-	
-		// setup the arrays
+	nvertex=ntot_count*4;
+	nindex=ntot_count*6;
+
+	view_create_effect_vertex_object(effect,((nvertex*(3+2))*sizeof(float)),(nindex*sizeof(unsigned short)));
+
+	view_bind_effect_vertex_object(effect);
+	vertex_ptr=(float*)view_map_effect_vertex_object();
+	if (vertex_ptr==NULL) {
+		view_unbind_effect_vertex_object();
+		return;
+	}
+
+		// setup the vertexes
 
 	particle_count=particle->count;
 	ntrail=particle->trail_count+1;
+	
 	trail_step=particle->trail_step;
+	f_count=(float)count;
 		
 	idx=0;
 			
-	for (i=0;i!=ntrail;i++) {
+	for (n=0;n!=ntrail;n++) {
 
 			// get gravity
 
@@ -379,26 +380,49 @@ void particle_draw(effect_type *effect,int count)
 
 			// draw pixels
 
-		idx=particle_fill_array_quad_single(vertex_ptr,idx,nvertex,mx,my,mz,rot_ang,pixel_sz,&pixel_mat_x,&pixel_mat_y,gravity,count,particle_count,particle->pieces[eff_particle->variation_idx],gx,gy,g_size);
+		idx=particle_fill_array_quad_single(vertex_ptr,idx,nvertex,&pnt,rot_ang,pixel_sz,&pixel_x_mat,&pixel_y_mat,gravity,f_count,particle_count,particle->pieces[eff_particle->variation_idx],gx,gy,g_size);
 
 			// reduce pixel sizes and counts for trails
 			
 		pixel_sz=pixel_sz*particle->reduce_pixel_fact;
-		count-=trail_step;
-		if ((count<0) || (pixel_sz<=0)) break;
+		f_count-=trail_step;
 	}
 
 		// unmap vertex object
 
-	view_unmap_current_vertex_object();
-	
+	view_unmap_effect_vertex_object();
+
+		// create the indexes
+
+	view_bind_effect_index_object(effect);
+	index_ptr=(unsigned short*)view_map_effect_index_object();
+	if (index_ptr==NULL) {
+		view_unbind_effect_vertex_object();
+		return;
+	}
+
+	v_idx=0;
+
+	for (n=0;n!=ntot_count;n++) {
+		*index_ptr++=v_idx;
+		*index_ptr++=v_idx+1;
+		*index_ptr++=v_idx+3;
+
+		*index_ptr++=v_idx+1;
+		*index_ptr++=v_idx+2;
+		*index_ptr++=v_idx+3;
+
+		v_idx+=4;
+	}
+
+	view_unmap_effect_index_object();
+
 		// draw arrays
-		
-	gl_texture_simple_start();
-	gl_texture_simple_set(view_images_get_gl_id(particle->image_idx),FALSE,col.r,col.g,col.b,alpha);
+
+	gl_shader_draw_execute_simple_bitmap_set_texture(view_images_get_gl_id(particle->image_idx));
+	gl_shader_draw_execute_simple_bitmap_start(3,0,(3*sizeof(float)),((3+2)*sizeof(float)),&col,alpha);
 
 	glEnable(GL_BLEND);
-
 	if (particle->blend_add) {
 		glBlendFunc(GL_SRC_ALPHA,GL_ONE);
 	}
@@ -406,30 +430,18 @@ void particle_draw(effect_type *effect,int count)
 		glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
 	}
 
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
-
 	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_FALSE);			// don't let alpha z's interfere with each other
 
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(3,GL_FLOAT,0,0);
-
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)((nvertex*3)*sizeof(float)));
-
-	glDrawArrays(GL_QUADS,0,idx);
-
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
+	glDrawElements(GL_TRIANGLES,nindex,GL_UNSIGNED_SHORT,(GLvoid*)0);
 
 	glDepthMask(GL_TRUE);
-	
-	gl_texture_simple_end();
 
-		// unbind vertex object
+	gl_shader_draw_execute_simple_bitmap_end();
+
+		// unbind vertex/index object
 		
-	view_unbind_current_vertex_object();
+	view_unbind_effect_index_object();
+	view_unbind_effect_vertex_object();
 }
 

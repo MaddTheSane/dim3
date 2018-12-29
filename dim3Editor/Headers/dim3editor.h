@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -36,20 +36,31 @@ and can be sold or given away.
 #endif
 
 //
+// Open Source Libraries
+//
+
+#include "png.h"
+
+//
 // Utility Headers
 //
 
 #include "baseutility.h"
+#include "baseprivate.h"
+
 #include "modelutility.h"
+#include "modelprivate.h"
+
 #include "maputility.h"
-#include "mapimport.h"
+#include "mapprivate.h"
+
+#include "autogenerateutility.h"
+#include "autogeneratemapprivate.h"
+#include "autogeneratemodelprivate.h"
 
 //
 // Application Headers
 //
 
-#ifdef D3_OS_MAC
-	#include "application_defs.h"
-#endif
-
 #include "editor_defs.h"
+

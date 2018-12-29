@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,15 +29,12 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "remotes.h"
-#include "consoles.h"
-#include "interfaces.h"
-#include "video.h"
 
 extern server_type			server;
 extern view_type			view;
-extern hud_type				hud;
+extern iface_type			iface;
 extern setup_type			setup;
 extern network_setup_type	net_setup;
 extern render_info_type		render_info;
@@ -48,23 +45,23 @@ extern render_info_type		render_info;
       
 ======================================================= */
 
-void radar_draw(int tick)
+void radar_draw(void)
 {
-	int						n,x,y,lx,rx,ty,by,px[4],py[4],
+	int						n,tick,x,y,lx,rx,ty,by,
 							dist,max_dist,fade_dist,fade_count,radar_sz;
-	unsigned long			cur_gl_id,gl_id;
-	float					alpha,cur_alpha,fade_mult;
+	unsigned long			gl_id;
+	float					alpha,fade_mult;
 	d3col					tint;
 	obj_type				*obj,*player_obj;
-	hud_radar_icon_type		*icon;
+	iface_radar_icon_type	*icon;
 	
 		// radar on?
 		
-	if (!hud.radar.on) return;
+	if (!iface.radar.on) return;
 	
 		// get player object (center of radar)
 		
-	player_obj=object_find_uid(server.player_obj_uid);
+	player_obj=server.obj_list.objs[server.player_obj_idx];
 
 		// set up view
 		
@@ -73,60 +70,38 @@ void radar_draw(int tick)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
 	
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
-	
 	glDisable(GL_DEPTH_TEST);
 
 		// get radar size
 
-	radar_sz=hud.radar.display_radius;
+	radar_sz=iface.radar.display_radius;
 
-	lx=hud.radar.x-radar_sz;
-	ty=hud.radar.y-radar_sz;
+	lx=iface.radar.pnt.x-radar_sz;
+	ty=iface.radar.pnt.y-radar_sz;
 	rx=lx+(radar_sz<<1);
 	by=ty+(radar_sz<<1);
 
-		// draw radar background
+		// draw background
+		
+	gl_id=view_images_get_gl_id(iface.radar.background_image_idx);
+	view_primitive_2D_texture_quad(gl_id,NULL,1.0f,lx,rx,ty,by,0.0f,1.0f,0.0f,1.0f,TRUE);
 
-	if (!hud.radar.team_tint) {
-		tint.r=tint.g=tint.b=1.0f;
-	}
-	else {
-		if (!net_setup.client.joined) {
-			memmove(&tint,&hud.color.default_tint,sizeof(d3col));
-		}
-		else {
-			object_get_tint(player_obj,&tint);
-		}
-	}
+		// ticks for fades
 
-	gl_texture_simple_start();
-	gl_texture_simple_set(view_images_get_gl_id(hud.radar.background_image_idx),TRUE,tint.r,tint.g,tint.b,1.0f);
-
-	glBegin(GL_QUADS);
-	glTexCoord2f(0.0f,0.0f);
-	glVertex2i(lx,ty);
-	glTexCoord2f(1.0f,0.0f);
-	glVertex2i(rx,ty);
-	glTexCoord2f(1.0f,1.0f);
-	glVertex2i(rx,by);
-	glTexCoord2f(0.0f,1.0f);
-	glVertex2i(lx,by);
-	glEnd();
+	tick=game_time_get();
 
 		// draw radar objects
 		
-	cur_gl_id=-1;
-	cur_alpha=1.0f;
-	
-	max_dist=hud.radar.view_radius;
+	tint.r=tint.g=tint.b=1.0f;
+		
+	max_dist=iface.radar.view_radius;
 	fade_dist=max_dist>>1;
 	
-	for (n=0;n!=server.count.obj;n++) {
-		obj=&server.objs[n];
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
 
-		if (obj->uid==server.player_obj_uid) continue;
+		if (obj->idx==server.player_obj_idx) continue;
 		if ((obj->hidden) || (!obj->radar.on) || (obj->radar.icon_idx==-1)) continue;
 			
 			// get distance
@@ -150,12 +125,12 @@ void radar_draw(int tick)
 				// if not moving, handle the fading
 
 			else {
-				if (hud.radar.no_motion_fade==0) continue;
+				if (iface.radar.no_motion_fade==0) continue;
 
 				fade_count=tick-obj->radar.fade_start_tick;
-				if (fade_count>hud.radar.no_motion_fade) continue;
+				if (fade_count>iface.radar.no_motion_fade) continue;
 
-				fade_mult=1.0f-(((float)fade_count)/((float)hud.radar.no_motion_fade));
+				fade_mult=1.0f-(((float)fade_count)/((float)iface.radar.no_motion_fade));
 			}
 		}
 
@@ -164,17 +139,17 @@ void radar_draw(int tick)
 		x=obj->pnt.x-player_obj->pnt.x;
 		y=-(obj->pnt.z-player_obj->pnt.z);
 			
-		if (hud.radar.rot) rotate_2D_point_center(&x,&y,player_obj->ang.y);
+		if (iface.radar.rot) rotate_2D_point_center(&x,&y,player_obj->ang.y);
 
 			// if outside max, stick to edge
 
 		if (dist>max_dist) {
-			x=hud.radar.x+((x*radar_sz)/dist);
-			y=hud.radar.y-((y*radar_sz)/dist);
+			x=iface.radar.pnt.x+((x*radar_sz)/dist);
+			y=iface.radar.pnt.y-((y*radar_sz)/dist);
 		}
 		else {
-			x=hud.radar.x+((x*radar_sz)/max_dist);
-			y=hud.radar.y-((y*radar_sz)/max_dist);
+			x=iface.radar.pnt.x+((x*radar_sz)/max_dist);
+			y=iface.radar.pnt.y-((y*radar_sz)/max_dist);
 		}
 
 			// get alpha
@@ -188,36 +163,23 @@ void radar_draw(int tick)
 			
 			// draw object
 		
-		icon=&hud.radar.icons[obj->radar.icon_idx];
+		icon=&iface.radar.icons[obj->radar.icon_idx];
+
+		lx=x-icon->size;
+		rx=x+icon->size;
+		ty=y-icon->size;
+		by=y+icon->size;
+
+			// draw icon
 		
 		gl_id=view_images_get_gl_id(icon->image_idx);
-		if ((gl_id!=cur_gl_id) || (alpha!=cur_alpha)) {
-			cur_gl_id=gl_id;
-			cur_alpha=alpha;
-			gl_texture_simple_set(gl_id,TRUE,1.0f,1.0f,1.0f,alpha);
+
+		if (icon->rot) {
+			view_primitive_2D_texture_quad_rot(gl_id,&tint,alpha,lx,rx,ty,by,obj->ang.y,0.0f,1.0f,0.0f,1.0f);
 		}
-
-		px[0]=px[3]=x-icon->size;
-		px[1]=px[2]=x+icon->size;
-		py[0]=py[1]=y-icon->size;
-		py[2]=py[3]=y+icon->size;
-
-		if (icon->rot) rotate_2D_polygon(4,px,py,x,y,obj->ang.y);
-	
-		glBegin(GL_QUADS);
-		glTexCoord2f(0.0f,0.0f);
-		glVertex2i(px[0],py[0]);
-		glTexCoord2f(1.0f,0.0f);
-		glVertex2i(px[1],py[1]);
-		glTexCoord2f(1.0f,1.0f);
-		glVertex2i(px[2],py[2]);
-		glTexCoord2f(0.0f,1.0f);
-		glVertex2i(px[3],py[3]);
-		glEnd();
-
-		obj++;
+		else {
+			view_primitive_2D_texture_quad(gl_id,&tint,alpha,lx,rx,ty,by,0.0f,1.0f,0.0f,1.0f,TRUE);
+		}
 	}
-
-	gl_texture_simple_end();
 }
 

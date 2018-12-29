@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,19 +29,131 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "effects.h"
-#include "consoles.h"
-#include "video.h"
+#include "interface.h"
 
-float					line_zag[16]={1.0f,0.5f,0.8f,-0.2f,0.3f,-1.0f,-0.7f,0.1f,-0.4f,0.6f,-0.4f,0.5f,-0.6f,0.2f,-0.8f,-0.4f};
+float					effect_lightning_line_zag[16]={1.0f,0.5f,0.8f,-0.2f,0.3f,-1.0f,-0.7f,0.1f,-0.4f,0.6f,-0.4f,0.5f,-0.6f,0.2f,-0.8f,-0.4f};
 
 extern map_type			map;
 extern server_type		server;
 extern view_type		view;
+extern iface_type		iface;
 
-extern bool effect_inview(effect_type *effect,int count);
-extern double distance_to_view_center(int x,int y,int z);
-extern bool view_mesh_in_draw_list(int mesh_idx);
+/* =======================================================
+
+      Effect Bound Box
+      
+======================================================= */
+
+void effect_draw_get_bound_box(effect_type *effect,d3pnt *min,d3pnt *max)
+{
+	int					count,size,gravity_y;
+	d3pnt				pnt;
+	iface_particle_type	*particle;
+
+	switch (effect->effecttype) {
+
+		case ef_particle:
+			count=game_time_get()-effect->start_tick;
+			particle_draw_position(effect,count,&pnt);
+
+			size=effect->size;
+			min->x=pnt.x-(size>>1);
+			max->x=min->x+size;
+			min->z=pnt.z-(size>>1);
+			max->z=min->z+size;
+			min->y=pnt.y-size;
+			max->y=pnt.y;
+
+			particle=&iface.particle_list.particles[effect->data.particle.particle_idx];
+			gravity_y=(int)particle_get_gravity(particle,count);
+
+			if (gravity_y<0) {
+				min->y+=gravity_y;
+			}
+			else {
+				max->y+=gravity_y;
+			}
+			
+			break;
+
+		case ef_ring:
+			count=game_time_get()-effect->start_tick;
+			ring_draw_position(effect,count,&pnt);
+
+			size=effect->size;
+			min->x=pnt.x-(size>>1);
+			max->x=min->x+size;
+			min->z=pnt.z-(size>>1);
+			max->z=min->z+size;
+			min->y=pnt.y-size;
+			max->y=pnt.y;
+			break;
+
+		case ef_lightning:
+			if (effect->data.lightning.start_pnt.x<effect->data.lightning.end_pnt.x) {
+				min->x=effect->data.lightning.start_pnt.x;
+				max->x=effect->data.lightning.end_pnt.x;
+			}
+			else {
+				min->x=effect->data.lightning.end_pnt.x;
+				max->x=effect->data.lightning.start_pnt.x;
+			}
+			if (effect->data.lightning.start_pnt.y<effect->data.lightning.end_pnt.y) {
+				min->y=effect->data.lightning.start_pnt.y;
+				max->y=effect->data.lightning.end_pnt.y;
+			}
+			else {
+				min->y=effect->data.lightning.end_pnt.y;
+				max->y=effect->data.lightning.start_pnt.y;
+			}
+			if (effect->data.lightning.start_pnt.z<effect->data.lightning.end_pnt.z) {
+				min->z=effect->data.lightning.start_pnt.z;
+				max->z=effect->data.lightning.end_pnt.z;
+			}
+			else {
+				min->z=effect->data.lightning.end_pnt.z;
+				max->z=effect->data.lightning.start_pnt.z;
+			}
+			break;
+
+		case ef_ray:
+			if (effect->data.ray.start_pnt.x<effect->data.ray.end_pnt.x) {
+				min->x=effect->data.ray.start_pnt.x;
+				max->x=effect->data.ray.end_pnt.x;
+			}
+			else {
+				min->x=effect->data.ray.end_pnt.x;
+				max->x=effect->data.ray.start_pnt.x;
+			}
+			if (effect->data.ray.start_pnt.y<effect->data.ray.end_pnt.y) {
+				min->y=effect->data.ray.start_pnt.y;
+				max->y=effect->data.ray.end_pnt.y;
+			}
+			else {
+				min->y=effect->data.ray.end_pnt.y;
+				max->y=effect->data.ray.start_pnt.y;
+			}
+			if (effect->data.ray.start_pnt.z<effect->data.ray.end_pnt.z) {
+				min->z=effect->data.ray.start_pnt.z;
+				max->z=effect->data.ray.end_pnt.z;
+			}
+			else {
+				min->z=effect->data.ray.end_pnt.z;
+				max->z=effect->data.ray.start_pnt.z;
+			}
+			break;
+
+		default:
+			size=effect->size;
+			min->x=effect->pnt.x-(size>>1);
+			max->x=min->x+size;
+			min->z=effect->pnt.z-(size>>1);
+			max->z=min->z+size;
+			min->y=effect->pnt.y-size;
+			max->y=effect->pnt.y;
+			break;
+	}
+}
 
 /* =======================================================
 
@@ -49,40 +161,12 @@ extern bool view_mesh_in_draw_list(int mesh_idx);
       
 ======================================================= */
 
-void effect_draw_lightning_lines(int nline,float varient,int k,int sx,int sz,int sy,int ex,int ez,int ey,int xadd,int zadd,int yadd)
+void effect_draw_lightning(effect_type *effect)
 {
-    int			i,x,z,y;
-		
-	glBegin(GL_LINES);
-	
-	for (i=1;i<(nline-1);i++) {
-	
-		x=(sx+xadd)+(int)(line_zag[k]*varient);
-		y=(sy+yadd)+(int)(line_zag[(k+4)&0xF]*varient);
-		z=(sz+zadd)+(int)(line_zag[(k+8)&0xF]*varient);
-		
-		glVertex3i(sx,sy,sz);
-		glVertex3i(x,y,z);
-		
-		sx=x;
-		sz=z;
-		sy=y;
-        
-		k=(k+1)&0xF;
-	}
-	
-	glVertex3i(sx,sy,sz);
-	glVertex3i(ex,ey,ez);
-	
-	glEnd();
-}
-
-void effect_draw_lightning(int tick,effect_type *effect)
-{
-	int						k,nline,wid,x,z,y,
+	int						n,k,nline,wid,x,z,y,
                             sx,sz,sy,ex,ez,ey,xadd,zadd,yadd;
-	float					varient,alpha;
-	d3col					*col;
+	float					varient,fx,fy,fz,f_xadd,f_yadd,f_zadd;
+	float					*vertex_ptr;
 	lightning_effect_data	*lightning;
 	
 	lightning=&effect->data.lightning;
@@ -102,10 +186,10 @@ void effect_draw_lightning(int tick,effect_type *effect)
     x=abs(ex-sx);
     z=abs(ez-sz);
     y=abs(ey-sy);
-	nline=distance_get(x,z,y,0,0,0)/(map_enlarge<<1);
+	nline=distance_get(x,z,y,0,0,0)/200;
     
-    if (nline<5) nline=4;
-	if (nline>150) nline=150;
+    if (nline<effect_lightning_min_lines) nline=effect_lightning_min_lines;
+	if (nline>=effect_lightning_max_lines) nline=(effect_lightning_max_lines-1);
 	
         // get line steps
         
@@ -115,53 +199,93 @@ void effect_draw_lightning(int tick,effect_type *effect)
 	
         // line varients
         
-	k=((tick>>5)+lightning->line_offset)&0xF;
+	k=((game_time_get()>>5)+lightning->line_offset)&0xF;
 	varient=lightning->varient;
-	
-		// line colors
+
+		// construct VBO
+		// effect vbos are dynamic, so it'll auto construct
+		// the first time called
+
+	view_create_effect_vertex_object(effect,(((nline*3)*2)*sizeof(float)),-1);
+
+	view_bind_effect_vertex_object(effect);
+	vertex_ptr=(float*)view_map_effect_vertex_object();
+	if (vertex_ptr==NULL) {
+		view_unbind_effect_vertex_object();
+		return;
+	}
+
+		// setup vertexes
+
+	fx=(float)sx;
+	fy=(float)sy;
+	fz=(float)sz;
+
+	f_xadd=(float)xadd;
+	f_yadd=(float)yadd;
+	f_zadd=(float)zadd;
+
+	for (n=0;n!=nline;n++) {
 		
-	col=&lightning->col;
-    
+		*vertex_ptr++=fx;
+		*vertex_ptr++=fy;
+		*vertex_ptr++=fz;
+	
+		if (n==(nline-1)) {
+			*vertex_ptr++=(float)ex;
+			*vertex_ptr++=(float)ey;
+			*vertex_ptr++=(float)ez;
+		}
+		else {
+			fx=(fx+f_xadd)+(int)(effect_lightning_line_zag[k]*varient);
+			fy=(fy+f_yadd)+(int)(effect_lightning_line_zag[(k+4)&0xF]*varient);
+			fz=(fz+f_zadd)+(int)(effect_lightning_line_zag[(k+8)&0xF]*varient);
+
+			*vertex_ptr++=fx;
+			*vertex_ptr++=fy;
+			*vertex_ptr++=fz;
+		}
+
+		k=(k+1)&0xF;
+	}
+
+		// unmap vertex object
+
+	view_unmap_effect_vertex_object();
+	    
         // draw lines
 		
 	wid=lightning->wid;
-	alpha=0.6f;
 
 	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-
-	glDisable(GL_ALPHA_TEST);
+	glBlendFunc(GL_SRC_ALPHA,GL_ONE);
 
 	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_FALSE);
-		
-	glDisable(GL_LINE_SMOOTH);
+
+	gl_shader_draw_execute_simple_color_start(3,0,&lightning->col,0.1f);
 	
-	if (wid>2) {
-		glLineWidth((float)wid);
-		glColor4f(col->r,col->g,col->b,alpha);
-		effect_draw_lightning_lines(nline,varient,k,sx,sz,sy,ex,ez,ey,xadd,zadd,yadd);
-		alpha-=0.1f;
-	}
-	
-	if (wid>1) {
-		glLineWidth((float)((wid-1)/2));
-		glColor4f(((col->r+1.0f)/2.0f),((col->g+1.0f)/2.0f),((col->b+1.0f)/2.0f),alpha);
-		effect_draw_lightning_lines(nline,varient,k,sx,sz,sy,ex,ez,ey,xadd,zadd,yadd);
-		alpha-=0.1f;
-	}
-	
+	glLineWidth((float)(wid*5));
+	glDrawArrays(GL_LINES,0,(nline*2));
+
+	gl_shader_draw_execute_simple_color_set_color(&lightning->col,0.05f);
+	glLineWidth((float)(wid*3));
+	glDrawArrays(GL_LINES,0,(nline*2));
+
+	gl_shader_draw_execute_simple_color_set_color(&lightning->col,0.6f);
+	glLineWidth((float)wid);
+	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+	glDrawArrays(GL_LINES,0,(nline*2));
+
+	gl_shader_draw_execute_simple_color_end();
+
 	glLineWidth(1.0f);
-	if (wid==1) {
-		glColor4f(col->r,col->g,col->b,alpha);
-	}
-	else {
-		glColor4f(1.0f,1.0f,1.0f,alpha);
-	}
-	effect_draw_lightning_lines(nline,varient,k,sx,sz,sy,ex,ez,ey,xadd,zadd,yadd);
-    
-	glEnable(GL_LINE_SMOOTH);
+	
+	glDepthMask(GL_TRUE);
+
+		// unbind vertex object
+		
+	view_unbind_effect_vertex_object();
 }
 
 /* =======================================================
@@ -173,8 +297,7 @@ void effect_draw_lightning(int tick,effect_type *effect)
 void effect_draw_ray(effect_type *effect,int count)
 {
 	int						wid,sx,sz,sy,ex,ez,ey,life_tick;
-	float					alpha;
-	d3col					*col;
+	float					*vp;
 	ray_effect_data			*ray;
 	
 	ray=&effect->data.ray;
@@ -205,59 +328,46 @@ void effect_draw_ray(effect_type *effect,int count)
 		sz=ez+(((sz-ez)*count)/life_tick);
 	}
 
-		// line colors
-		
-	col=&ray->col;
-    
+		// setup vertexes
+
+	view_bind_utility_vertex_object();
+	vp=(float*)view_map_utility_vertex_object();
+
+	*vp++=(float)sx;
+	*vp++=(float)sy;
+	*vp++=(float)sz;
+
+	*vp++=(float)ex;
+	*vp++=(float)ey;
+	*vp++=(float)ez;
+
+	view_unmap_utility_vertex_object();
+
         // draw lines
 		
 	wid=ray->wid;
-	alpha=0.6f;
 
 	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-
-	glDisable(GL_ALPHA_TEST);
+	glBlendFunc(GL_SRC_ALPHA,GL_ONE);
 
 	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_FALSE);
-		
-	glDisable(GL_LINE_SMOOTH);
-        
-	if (wid>2) {
+
+	gl_shader_draw_execute_simple_color_start(3,0,&ray->col,1.0f);
+	
+	while (wid>0) {
+	
 		glLineWidth((float)wid);
-		glColor4f(col->r,col->g,col->b,0.6f);
-		glBegin(GL_LINES);
-		glVertex3i(sx,sy,sz);
-		glVertex3i(ex,ey,ez);
-		glEnd();
-		alpha-=0.1f;
+		glDrawArrays(GL_LINES,0,2);
+		
+		wid-=2;
 	}
+
+	gl_shader_draw_execute_simple_color_end();
 	
-	if (wid>1) {
-		glLineWidth((float)((wid-1)/2));
-		glColor4f(((col->r+1.0f)/2.0f),((col->g+1.0f)/2.0f),((col->b+1.0f)/2.0f),0.5f);
-		glBegin(GL_LINES);
-		glVertex3i(sx,sy,sz);
-		glVertex3i(ex,ey,ez);
-		glEnd();
-		alpha-=0.1f;
-	}
-	
-	glLineWidth(1.0f);
-	if (wid==1) {
-		glColor4f(col->r,col->g,col->b,alpha);
-	}
-	else {
-		glColor4f(1.0f,1.0f,1.0f,alpha);
-	}
-	glBegin(GL_LINES);
-	glVertex3i(sx,sy,sz);
-	glVertex3i(ex,ey,ez);
-	glEnd();
-	
-	glEnable(GL_LINE_SMOOTH);
+	glDepthMask(GL_TRUE);
+
+	view_unbind_utility_vertex_object();
 }
 
 /* =======================================================
@@ -266,7 +376,7 @@ void effect_draw_ray(effect_type *effect,int count)
       
 ======================================================= */
 
-void effect_image_animate_get_uv(int tick,image_animation_type *animate,float *gx,float *gy,float *g_size)
+void effect_image_animate_get_uv(int tick,int image_offset,iface_image_animation_type *animate,float *gx,float *gy,float *g_size)
 {
 	int				k,nimage,image_per_row;
 	float			gsz;
@@ -281,7 +391,7 @@ void effect_image_animate_get_uv(int tick,image_animation_type *animate,float *g
 			k=0;
 		}
 		else {
-			k=tick/animate->msec;
+			k=(tick/animate->msec)+image_offset;
 		}
 
 		if ((!animate->loop) && (k>=nimage)) {
@@ -313,38 +423,36 @@ void effect_image_animate_get_uv(int tick,image_animation_type *animate,float *g
       
 ======================================================= */
 
-void effect_draw(int tick)
+void effect_draw(void)
 {
-	int				n,count;
+	int				n,idx,tick,count;
 	effect_type		*effect;
-
-		// setup view
-
-	gl_3D_view();
-	gl_3D_rotate(&view.render->camera.pnt,&view.render->camera.ang);
-	gl_setup_project();
 		
 		// draw effects
+		// draw backwards to sort back to front
 		
-	for (n=0;n!=view.render->draw_list.count;n++) {
+	tick=game_time_get();
+
+	for (n=(view.render->draw_list.count-1);n>=0;n--) {
 		if (view.render->draw_list.items[n].type!=view_render_type_effect) continue;
 
-		effect=&server.effects[view.render->draw_list.items[n].idx];
+		idx=view.render->draw_list.items[n].idx;
+		effect=server.effect_list.effects[idx];
 		
 		count=tick-effect->start_tick;
 
 		switch (effect->effecttype) {
 
 			case ef_particle:
-				particle_draw(effect,count);
+				particle_draw(effect,count,idx);
 				break;
 				
 			case ef_ring:
-				ring_draw(effect,count);
+				ring_draw(effect,count,idx);
 				break;
 				
 			case ef_lightning:
-				effect_draw_lightning(tick,effect);
+				effect_draw_lightning(effect);
 				break;
 				
 			case ef_ray:

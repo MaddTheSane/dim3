@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,15 +29,18 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "video.h"
+#include "interface.h"
 
+extern app_type				app;
 extern map_type				map;
+extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
-extern hud_type				hud;
+extern file_path_setup_type	file_path_setup;
 
-float						progress_current;
-char						progress_str[256];
-bitmap_type					progress_bitmap;
+int							progress_start_tick,progress_cur_tick;
+bool						progress_on;
+bitmap_type					progress_background_bitmap,progress_bitmap;
 
 /* =======================================================
 
@@ -45,31 +48,55 @@ bitmap_type					progress_bitmap;
       
 ======================================================= */
 
-void progress_initialize(char *action)
+void progress_initialize(char *map_name)
 {
 	char			path[1024];
+	bool			bitmap_ok;
+
+		// ignore if dedicated host
+
+	if (app.dedicated_host) return;
 	
-		// progress text
+		// current progress
 		
-	strcpy(progress_str,action);
+	progress_start_tick=-1;
+	progress_cur_tick=0;
 	
 		// check for map progress background,
 		// otherwise use default
 		
-	file_paths_data(&setup.file_path_setup,path,"Bitmaps/Backgrounds_Map",map.info.name,"png");
-	if (!bitmap_open(&progress_bitmap,path,anisotropic_mode_none,mipmap_mode_none,FALSE,FALSE,FALSE)) {
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Backgrounds","load","png");
-		bitmap_open(&progress_bitmap,path,anisotropic_mode_none,mipmap_mode_none,FALSE,FALSE,FALSE);
+	bitmap_ok=FALSE;
+		
+	if (map_name!=NULL) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Backgrounds_Map",map_name,"png");
+		bitmap_ok=bitmap_open(&progress_background_bitmap,path,FALSE,FALSE,FALSE,gl_check_npot_textures_ok(),FALSE,FALSE);
 	}
 	
-		// current progress
+	if (!bitmap_ok) {
+		view_file_paths_bitmap_check_wide(path,"Bitmaps/Backgrounds","load");
+		bitmap_open(&progress_background_bitmap,path,FALSE,FALSE,FALSE,gl_check_npot_textures_ok(),FALSE,FALSE);
+	}
+
+		// progress bitmap
 		
-	progress_current=-1;
+	progress_on=TRUE;
+
+	if (iface.progress.bitmap_name[0]!=0x0) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Interface",iface.progress.bitmap_name,"png");
+		progress_on=bitmap_open(&progress_bitmap,path,FALSE,FALSE,FALSE,FALSE,FALSE,FALSE);
+	}
 }
 
 void progress_shutdown(void)
 {
-	bitmap_close(&progress_bitmap);
+		// ignore if dedicated host
+
+	if (app.dedicated_host) return;
+
+		// close bitmaps
+
+	bitmap_close(&progress_background_bitmap);
+	if (progress_on) bitmap_close(&progress_bitmap);
 }
 
 /* =======================================================
@@ -78,64 +105,60 @@ void progress_shutdown(void)
       
 ======================================================= */
 
-void progress_draw(float percentage)
+void progress_update(void)
 {
-	int					lft,rgt,top,bot,mid,rgt2,x,y;
+	int				lft,rgt,top,bot,
+					time_tick;
+	float			gx,gy,g_size;
 
-		// any change?
-		
-	if (progress_current==percentage) return;
+		// ignore if dedicated host
+
+	if (app.dedicated_host) return;
 	
-	progress_current=percentage;
+		// first time, get timing info
+		// using direct timer as game is paused
+		
+	if (progress_start_tick==-1) progress_start_tick=time_get();
+
+		// we don't want to skip frames
+		// so we cheat with the progress timing
+
+	time_tick=time_get();
+
+	if ((time_tick-progress_start_tick)>=iface.progress.animate.msec) {
+		progress_cur_tick+=iface.progress.animate.msec;
+		progress_start_tick=time_tick+((time_tick-progress_start_tick)%iface.progress.animate.msec);
+	}
 	
 		// start the frame
 	
-	gl_frame_start(NULL);
-	
-		// setup draw
-		
+	gl_frame_clear(FALSE);
+	gl_shader_frame_start();
+
 	gl_2D_view_interface();
-	
+
 		// draw background
+		// progress can be called while baseutility loads bitmaps, need to reset the current bitmap so it doesn't get lost
+
+	gl_texture_clear(0);
+	view_primitive_2D_texture_quad(progress_background_bitmap.gl_id,NULL,1.0f,0,iface.scale_x,0,iface.scale_y,0.0f,1.0f,0.0f,1.0f,TRUE);
+	
+		// draw the progress bitmap
 		
-	gl_texture_simple_start();
+	if (progress_on) {
 
-	glDisable(GL_BLEND);
-	glDisable(GL_ALPHA_TEST);
-	glDisable(GL_DEPTH_TEST);
-
-	gl_texture_simple_set(progress_bitmap.gl_id,TRUE,1.0f,1.0f,1.0f,1.0f);
-	view_draw_next_vertex_object_2D_texture_screen(hud.scale_x,hud.scale_y,0.0f,0.0f);
-	gl_texture_simple_end();
+			// draw the graphic
+			
+		lft=iface.progress.x;
+		rgt=lft+iface.progress.wid;
+		top=iface.progress.y;
+		bot=top+iface.progress.high;
 	
-		// draw the progress background
+		effect_image_animate_get_uv(progress_cur_tick,0,&iface.progress.animate,&gx,&gy,&g_size);
 		
-	lft=hud.progress.lx;
-	rgt=hud.progress.rx;
-	top=hud.progress.ty;
-	bot=hud.progress.by;
+		view_primitive_2D_texture_quad(progress_bitmap.gl_id,NULL,1.0f,lft,rgt,top,bot,gx,(gx+g_size),gy,(gy+g_size),TRUE);
+	}
 
-	mid=(top+bot)>>1;
-
-	view_draw_next_vertex_object_2D_color_quad(lft,top,&hud.progress.base_color_start,rgt,top,&hud.progress.base_color_start,rgt,mid,&hud.progress.base_color_end,lft,mid,&hud.progress.base_color_end,1.0f);
-	view_draw_next_vertex_object_2D_color_quad(lft,mid,&hud.progress.base_color_end,rgt,mid,&hud.progress.base_color_end,rgt,bot,&hud.progress.base_color_start,lft,bot,&hud.progress.base_color_start,1.0f);
-	
-		// draw the progress foreground
-	
-	rgt2=lft+(int)((float)(rgt-lft)*(percentage/100));
-	
-	view_draw_next_vertex_object_2D_color_quad(lft,top,&hud.progress.hilite_color_start,rgt2,top,&hud.progress.hilite_color_start,rgt2,mid,&hud.progress.hilite_color_end,lft,mid,&hud.progress.hilite_color_end,1.0f);
-	view_draw_next_vertex_object_2D_color_quad(lft,mid,&hud.progress.hilite_color_end,rgt2,mid,&hud.progress.hilite_color_end,rgt2,bot,&hud.progress.hilite_color_start,lft,bot,&hud.progress.hilite_color_start,1.0f);
-
-		// progress text
-
-	x=(hud.progress.lx+hud.progress.rx)>>1;
-	y=(hud.progress.ty+hud.progress.by)>>1;
-	
-	gl_text_start(hud.progress.text_size);
-	gl_text_draw(x,y,progress_str,tx_center,TRUE,&hud.progress.text_color,1.0f);
-	gl_text_end();
-
-	gl_frame_end();
+	gl_frame_swap();
 }
 

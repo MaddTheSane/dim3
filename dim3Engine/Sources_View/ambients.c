@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,7 +29,8 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "sounds.h"
+#include "interface.h"
+#include "objects.h"
 
 int							map_ambient_idx,map_ambient_buffer_idx;
 float						map_ambient_pitch;
@@ -40,30 +41,7 @@ extern server_type			server;
 
 /* =======================================================
 
-      Object Sounds
-      
-======================================================= */
-
-void ambient_add_objects(void)
-{
-	int					n;
-	obj_type			*obj;
-	obj_snd_ambient		*ambient;
-	
-	obj=server.objs;
-	
-	for (n=0;n!=server.count.obj;n++) {
-		ambient=&obj->ambient;
-		if ((ambient->on) && (ambient->buffer_idx!=-1)) {
-			al_ambient_list_add(ambient->buffer_idx,&obj->pnt,ambient->pitch);
-		}
-		obj++;
-	}
-}
-
-/* =======================================================
-
-      Map Sounds
+      Ambients for Map, Objects, and Liquids
       
 ======================================================= */
 
@@ -80,6 +58,41 @@ void ambient_add_map_sounds(void)
 		}
 		mapsound++;
 	}
+}
+
+void ambient_add_objects(void)
+{
+	int					n;
+	obj_type			*obj;
+	obj_snd_ambient		*ambient;
+	
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
+
+		if (obj->hidden) continue;		// no ambients for hidden objects
+
+		ambient=&obj->ambient;
+		if ((ambient->on) && (ambient->buffer_idx!=-1)) {
+			al_ambient_list_add(ambient->buffer_idx,&obj->pnt,ambient->pitch);
+		}
+	}
+}
+
+void ambient_add_liquids(void)
+{
+	obj_type			*player_obj;
+	map_liquid_type		*liq;
+	
+	player_obj=server.obj_list.objs[server.player_obj_idx];
+	if (player_obj==NULL) return;
+	
+	if ((player_obj->liquid.mode!=lm_under) || (player_obj->contact.liquid_idx==-1)) return;
+	
+	liq=&map.liquid.liquids[player_obj->contact.liquid_idx];
+	if (liq->ambient.buffer_idx==-1) return;
+	
+	al_ambient_list_add(liq->ambient.buffer_idx,&player_obj->pnt,1.0f);
 }
 
 /* =======================================================

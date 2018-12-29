@@ -1,0 +1,10 @@
+#include <windows.h>
+#include "resource.h"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+IDR_MAINFRAME		ICON							"dim3Engine.ico"
+

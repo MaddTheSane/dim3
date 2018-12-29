@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,15 +29,14 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "physics.h"
-#include "consoles.h"
-#include "interfaces.h"
-#include "video.h"
 
+extern map_type				map;
 extern camera_type			camera;
 extern view_type			view;
 extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
 
 /* =======================================================
@@ -51,35 +50,23 @@ void halo_draw_clear(void)
 	view.render->halo_draw.count=0;
 }
 
-void halo_draw_add(int x,int z,int y,int obj_uid,model_draw_halo *mdl_halo)
+void halo_draw_add(d3pnt *pnt,int obj_idx,int halo_idx)
 {
 	halo_draw_type		*halo_draw;
 	
-	if (mdl_halo->idx==-1) return;
+	if (halo_idx==-1) return;
 	if (view.render->halo_draw.count>=max_light_spot) return;
 	
 	halo_draw=&view.render->halo_draw.halos[view.render->halo_draw.count];
 	view.render->halo_draw.count++;
 	
-	halo_draw->idx=mdl_halo->idx;
+	halo_draw->idx=halo_idx;
 
-	halo_draw->obj_uid=obj_uid;
+	halo_draw->obj_idx=obj_idx;
 	
-	halo_draw->pnt.x=x;
-	halo_draw->pnt.z=z;
-	halo_draw->pnt.y=y;
-	
-	halo_draw->min_dist=mdl_halo->min_dist;
-	halo_draw->max_dist=mdl_halo->max_dist;
-	
-	halo_draw->min_pixel_sz=mdl_halo->min_size;
-	halo_draw->max_pixel_sz=mdl_halo->max_size;
-	
-	halo_draw->min_alpha=mdl_halo->min_alpha;
-	halo_draw->max_alpha=mdl_halo->max_alpha;
-	
-	halo_draw->no_clip_object=mdl_halo->no_clip_object;
-	halo_draw->no_clip_self=mdl_halo->no_clip_self;
+	halo_draw->pnt.x=pnt->x;
+	halo_draw->pnt.y=pnt->y;
+	halo_draw->pnt.z=pnt->z;
 }
 
 /* =======================================================
@@ -88,156 +75,110 @@ void halo_draw_add(int x,int z,int y,int obj_uid,model_draw_halo *mdl_halo)
       
 ======================================================= */
 
-void halo_draw_setup(void)
+bool halo_draw_setup_cull(iface_halo_type *halo,int obj_idx,d3pnt *pnt,int *p_pixel_sz,float *p_alpha)
 {
-	int						n,x,y,z,pixel_sz,dist,d;
+	int						pixel_sz,dist,d;
 	float					alpha;
 	bool					hit;
-	d3pnt					spt,ept,hpt;
-	obj_type				*obj;
-	halo_draw_type			*halo_draw;
+	d3pnt					ept;
 	ray_trace_contact_type	contact;
 	
-	view.render->halo_draw.in_view_count=0;
-	
-		// clear all halo spots
-	
-	halo_draw=view.render->halo_draw.halos;
-	
-	for (n=0;n!=view.render->halo_draw.count;n++) {
-		halo_draw->in_view=TRUE;
-		halo_draw++;
+		// is ray greater than max distance?
+
+	dist=distance_get(pnt->x,pnt->y,pnt->z,view.render->camera.pnt.x,view.render->camera.pnt.y,view.render->camera.pnt.z);
+	if (dist>halo->max_dist) return(FALSE);
+
+		// ray trace for visibily
+
+	contact.proj.on=FALSE;
+	contact.origin=poly_ray_trace_origin_halo;
+	contact.obj.on=!halo->no_clip_object;
+
+	if ((halo->no_clip_self) && (obj_idx!=-1)) {
+		contact.obj.ignore_idx=obj_idx;
 	}
-
-		// remove halos behind z or off-screen
-		// ignore console as it won't matter for projection
-		
-	gl_3D_view();
-	gl_3D_rotate(&view.render->camera.pnt,&view.render->camera.ang);
-	gl_setup_project();
-
-	for (n=0;n!=view.render->halo_draw.count;n++) {
-		halo_draw=&view.render->halo_draw.halos[n];
-		
-			// translate and rotate point
-			
-		x=halo_draw->pnt.x;
-		y=halo_draw->pnt.y;
-		z=halo_draw->pnt.z;
-		
-			// is it behind the z?
-
-		if (!gl_project_in_view_z(x,y,z)) {
-			halo_draw->in_view=FALSE;
-			continue;
-		}
-				
-			// project halos
-			
-		gl_project_point(&x,&y,&z);
-
-		halo_draw->proj_pnt.x=x;
-		halo_draw->proj_pnt.y=y;
-		halo_draw->proj_pnt.z=z;
+	else {
+		contact.obj.ignore_idx=-1;
 	}
-
-		// ray trace halos to camera's eye level
-		// to check for visibility
 
 	ept.x=view.render->camera.pnt.x;
 	ept.y=view.render->camera.pnt.y;
 	ept.z=view.render->camera.pnt.z;
 
-	contact.proj.on=FALSE;
+	hit=ray_trace_map_by_point(pnt,&ept,&contact);
 
-	contact.hit_mode=poly_ray_trace_hit_mode_all;
-	contact.origin=poly_ray_trace_origin_object;
+		// check hit and ignore hitting the projecting
+		// player
 
-	for (n=0;n!=view.render->halo_draw.count;n++) {
-		halo_draw=&view.render->halo_draw.halos[n];
-		if (!halo_draw->in_view) continue;
+	if (hit) {
+		if ((contact.poly.mesh_idx!=-1) || (map.camera.camera_mode!=cv_fpp)) return(FALSE);
+		if (contact.obj.idx!=server.player_obj_idx) return(FALSE);
+	}
 
-		spt.x=halo_draw->pnt.x;
-		spt.y=halo_draw->pnt.y;
-		spt.z=halo_draw->pnt.z;
+		// get size
 
-			// is ray greater than max distance?
-
-		dist=distance_get(spt.x,spt.y,spt.z,ept.x,ept.y,ept.z);
-		if (dist>halo_draw->max_dist) {
-			halo_draw->in_view=FALSE;
-			continue;
-		}
-
-			// ray trace for visibily
-
-		contact.obj.on=!halo_draw->no_clip_object;
-
-		if (halo_draw->no_clip_self) {
-			contact.obj.ignore_uid=halo_draw->obj_uid;
+	if (dist>=halo->max_dist) {
+		pixel_sz=halo->max_size;
+		alpha=halo->max_alpha;
+	}
+	else {
+		if (dist<=halo->min_dist) {
+			pixel_sz=halo->min_size;
+			alpha=halo->min_alpha;
 		}
 		else {
-			contact.obj.ignore_uid=-1;
-		}
-		
-			// push slighty towards player to clear
-			// any ray trace errors from being too
-			// close to projecting object
-
-		if (halo_draw->obj_uid!=-1) {
-			obj=object_find_uid(halo_draw->obj_uid);
-			ray_push_to_end(&spt,&ept,obj->size.radius);
-		}
-
-		hit=ray_trace_map_by_point(&spt,&ept,&hpt,&contact);
-
-		if (camera.mode==cv_fpp) {
-			if (hit) {
-				if (contact.obj.uid!=server.player_obj_uid) {
-					halo_draw->in_view=FALSE;
-					continue;
-				}
-			}
-		}
-		else {
-			if (hit) {
-				halo_draw->in_view=FALSE;
-				continue;
-			}
-		}
-
-			// get size
-
-		if (dist>=halo_draw->max_dist) {
-			halo_draw->pixel_sz=halo_draw->max_pixel_sz;
-			halo_draw->alpha=halo_draw->max_alpha;
-		}
-		else {
-			if (dist<=halo_draw->min_dist) {
-				halo_draw->pixel_sz=halo_draw->min_pixel_sz;
-				halo_draw->alpha=halo_draw->min_alpha;
-			}
-			else {
-				dist-=halo_draw->min_dist;
-				
-				d=halo_draw->max_dist-halo_draw->min_dist;
-				pixel_sz=halo_draw->max_pixel_sz-halo_draw->min_pixel_sz;
-				alpha=halo_draw->max_alpha-halo_draw->min_alpha;
-				
-				halo_draw->pixel_sz=((pixel_sz*dist)/d)+halo_draw->min_pixel_sz;
-				halo_draw->alpha=((alpha*(float)dist)/(float)d)+halo_draw->min_alpha;
-			}
-		}
-		
-			// obscure halos outside of view port
+			dist-=halo->min_dist;
 			
-		if (((halo_draw->proj_pnt.x+halo_draw->pixel_sz)<0) || ((halo_draw->proj_pnt.y+halo_draw->pixel_sz)<0) || ((halo_draw->proj_pnt.x-halo_draw->pixel_sz)>=setup.screen.x_sz) || ((halo_draw->proj_pnt.y-halo_draw->pixel_sz)>=setup.screen.y_sz)) {
-			halo_draw->in_view=FALSE;
-			continue;
+			d=halo->max_dist-halo->min_dist;
+			pixel_sz=halo->max_size-halo->min_size;
+			alpha=halo->max_alpha-halo->min_alpha;
+			
+			pixel_sz=((pixel_sz*dist)/d)+halo->min_size;
+			alpha=((alpha*(float)dist)/(float)d)+halo->min_alpha;
 		}
-		
-			// add to view count
+	}
 
+	*p_pixel_sz=pixel_sz;
+	*p_alpha=alpha;
+
+	return(TRUE);
+}
+
+void halo_draw_setup(void)
+{
+	int						n;
+	halo_draw_type			*halo_draw;
+	
+	view.render->halo_draw.in_view_count=0;
+	
+		// clear all halo spots
+	
+	for (n=0;n!=view.render->halo_draw.count;n++) {
+
+		halo_draw=&view.render->halo_draw.halos[n];
+		halo_draw->in_view=FALSE;
+
+			// is it behind the z?
+
+		if (!gl_project_in_view_z(&halo_draw->pnt)) continue;
+				
+			// cull halo
+
+		if (!halo_draw_setup_cull(&iface.halo_list.halos[halo_draw->idx],halo_draw->obj_idx,&halo_draw->pnt,&halo_draw->pixel_sz,&halo_draw->alpha)) continue;
+
+			// project the halo
+			// and check if on screen
+
+		halo_draw->proj_pnt.x=halo_draw->pnt.x;
+		halo_draw->proj_pnt.y=halo_draw->pnt.y;
+		halo_draw->proj_pnt.z=halo_draw->pnt.z;
+			
+		gl_project_point(&halo_draw->proj_pnt);
+		halo_draw->proj_pnt.y=view.screen.y_sz-halo_draw->proj_pnt.y;
+		
+		if (((halo_draw->proj_pnt.x+halo_draw->pixel_sz)<0) || ((halo_draw->proj_pnt.y+halo_draw->pixel_sz)<0) || ((halo_draw->proj_pnt.x-halo_draw->pixel_sz)>=view.screen.x_sz) || ((halo_draw->proj_pnt.y-halo_draw->pixel_sz)>=view.screen.y_sz)) continue;
+
+		halo_draw->in_view=TRUE;
 		view.render->halo_draw.in_view_count++;
 	}
 }
@@ -251,26 +192,27 @@ void halo_draw_setup(void)
 void halo_draw_render(void)
 {
 	int						n,x,y,psz;
+	float					*vp;
+	d3col					col;
 	halo_draw_type			*halo_draw;
 	
 		// any halos to draw?
 		
 	if (view.render->halo_draw.in_view_count==0) return;
-		
-		// halos are post-render overlay effects
-		
-	gl_2D_view_screen();
-	
-	gl_texture_simple_start();
+
+		// setup texture drawing
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
 
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
-
 	glDisable(GL_DEPTH_TEST);
 	
+		// get color
+
+	col.r=col.g=col.b=1.0f;
+
+		// draw halos
+		
 	for (n=0;n!=view.render->halo_draw.count;n++) {
 		halo_draw=&view.render->halo_draw.halos[n];
 		if (!halo_draw->in_view) continue;
@@ -278,25 +220,52 @@ void halo_draw_render(void)
 			// halo size
 			
 		x=halo_draw->proj_pnt.x;
-		y=setup.screen.y_sz-halo_draw->proj_pnt.y;
+		y=halo_draw->proj_pnt.y;
 		psz=halo_draw->pixel_sz>>1;
 
-			// draw halo
-			
-		gl_texture_simple_set(view_images_get_gl_id(server.halos[halo_draw->idx].image_idx),TRUE,1,1,1,halo_draw->alpha);
+			// setup vertex
 
-		glBegin(GL_QUADS);
-		glTexCoord2f(0,0);
-		glVertex2i((x-psz),(y-psz));
-		glTexCoord2f(1,0);
-		glVertex2i((x+psz),(y-psz));
-		glTexCoord2f(1,1);
-		glVertex2i((x+psz),(y+psz));
-		glTexCoord2f(0,1);
-		glVertex2i((x-psz),(y+psz));
-		glEnd();
-	}
+		view_bind_utility_vertex_object();
+		vp=(float*)view_map_utility_vertex_object();
+
+		*vp++=(float)(x-psz);
+		*vp++=(float)(y-psz);
+		*vp++=0.0f;
+		*vp++=0.0f;
+
+		*vp++=(float)(x-psz);
+		*vp++=(float)(y+psz);
+		*vp++=0.0f;
+		*vp++=1.0f;
+
+		*vp++=(float)(x+psz);
+		*vp++=(float)(y-psz);
+		*vp++=1.0f;
+		*vp++=0.0f;
+
+		*vp++=(float)(x+psz);
+		*vp++=(float)(y+psz);
+		*vp++=1.0f;
+		*vp++=1.0f;
+
+		view_unmap_utility_vertex_object();
+
+			// draw halo
+
+		gl_shader_draw_execute_simple_bitmap_set_texture(view_images_get_gl_id(iface.halo_list.halos[halo_draw->idx].image_idx));
 		
-	gl_texture_simple_end();
+		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+
+		gl_shader_draw_execute_simple_bitmap_start(2,0,(2*sizeof(float)),((2+2)*sizeof(float)),&col,halo_draw->alpha);
+		glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+		
+		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
+		
+		gl_shader_draw_execute_simple_bitmap_end();
+
+		view_unbind_utility_vertex_object();
+	}
 }
 

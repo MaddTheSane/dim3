@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,24 +29,26 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "scripts.h"
-#include "consoles.h"
 
-extern char				console_input_str[max_console_txt_sz];
+extern char				console_input_str[max_view_console_txt_sz];
+
+extern iface_type		iface;
+extern view_type		view;
 extern js_type			js;
 
-JSBool js_interface_console_write_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_interface_console_read_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
+JSValueRef js_interface_console_write_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_interface_console_read_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_interface_console_open_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
 
-JSClass			interface_console_class={"interface_console_class",0,
-							script_add_property,JS_PropertyStub,
-							JS_PropertyStub,JS_PropertyStub,
-							JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub,JS_FinalizeStub};
+JSStaticFunction	interface_console_functions[]={
+							{"write",				js_interface_console_write_func,		kJSPropertyAttributeDontDelete},
+							{"read",				js_interface_console_read_func,			kJSPropertyAttributeDontDelete},
+							{"open",				js_interface_console_open_func,			kJSPropertyAttributeDontDelete},
+							{0,0,0}};
 
-script_js_function	interface_console_functions[]={
-							{"write",				js_interface_console_write_func,		1},
-							{"read",				js_interface_console_read_func,			0},
-							{0}};
+JSClassRef			interface_console_class;
 
 /* =======================================================
 
@@ -54,9 +56,19 @@ script_js_function	interface_console_functions[]={
       
 ======================================================= */
 
-void script_add_interface_console_object(JSObject *parent_obj)
+void script_init_interface_console_object(void)
 {
-	script_create_child_object(parent_obj,"console",&interface_console_class,NULL,interface_console_functions);
+	interface_console_class=script_create_class("interface_console_class",NULL,interface_console_functions);
+}
+
+void script_free_interface_console_object(void)
+{
+	script_free_class(interface_console_class);
+}
+
+JSObjectRef script_add_interface_console_object(JSContextRef cx,JSObjectRef parent_obj,int script_idx)
+{
+	return(script_create_child_object(cx,parent_obj,interface_console_class,"console",script_idx));
 }
 
 /* =======================================================
@@ -65,20 +77,37 @@ void script_add_interface_console_object(JSObject *parent_obj)
       
 ======================================================= */
 
-JSBool js_interface_console_write_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_interface_console_write_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	char			txt[256];
 	
-	script_value_to_string(argv[0],txt,256);
+	if (!script_check_param_count(cx,func,argc,1,exception)) return(script_null_to_value(cx));
+
+	script_value_to_string(cx,argv[0],txt,256);
 	console_add(txt);
 	
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
-JSBool js_interface_console_read_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_interface_console_read_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
-	*rval=script_string_to_value(console_input_str);
-	return(JS_TRUE);
+	if (!script_check_param_count(cx,func,argc,0,exception)) return(script_null_to_value(cx));
+
+	return(script_string_to_value(cx,console_input_str));
 }
+
+JSValueRef js_interface_console_open_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
+{
+	if (!script_check_param_count(cx,func,argc,0,exception)) return(script_null_to_value(cx));
+	
+	if (iface.setup.game_debug) {
+		view.console.on=TRUE;
+		view.console.focus=TRUE;
+		input_clear_text_input();
+	}
+
+	return(script_null_to_value(cx));
+}
+
 
 

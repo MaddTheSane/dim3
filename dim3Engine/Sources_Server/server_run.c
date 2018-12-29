@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,25 +29,19 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "network.h"
 #include "scripts.h"
 #include "objects.h"
-#include "remotes.h"
-#include "weapons.h"
-#include "projectiles.h"
-#include "scenery.h"
-#include "models.h"
-#include "effects.h"
-#include "cameras.h"
 
+extern app_type				app;
 extern map_type				map;
 extern server_type			server;
 extern js_type				js;
 extern setup_type			setup;
 extern network_setup_type	net_setup;
 
-extern void group_moves_run(bool run_events);
-extern void map_movements_auto_open(void);
+extern void cinema_run(void);
 
 /* =======================================================
 
@@ -55,9 +49,25 @@ extern void map_movements_auto_open(void);
   
 ======================================================= */
 
-void mesh_triggers(obj_type *obj,int old_mesh_idx,int mesh_idx)
+void mesh_triggers(obj_type *obj)
 {
+	int						mesh_idx,old_mesh_idx;
 	map_mesh_type			*mesh;
+	
+		// no triggers if in air
+		
+	if (obj->air_mode!=am_ground) return;
+	
+		// any change on stand on?
+		
+	mesh_idx=obj->contact.stand_poly.mesh_idx;
+	old_mesh_idx=obj->mesh.last_stand_mesh_idx;
+		
+	if (mesh_idx==old_mesh_idx) return;
+	
+	obj->mesh.last_stand_mesh_idx=mesh_idx;
+	
+		// run change messages
 
 	if (mesh_idx!=-1) {	
 		mesh=&map.mesh.meshes[mesh_idx];
@@ -65,8 +75,8 @@ void mesh_triggers(obj_type *obj,int old_mesh_idx,int mesh_idx)
 			// entry messages
 			
 		if (mesh->msg.entry_on) {
-			scripts_post_event_console(&js.course_attach,sd_event_message,sd_event_message_from_course,mesh->msg.entry_id);
-			scripts_post_event_console(&obj->attach,sd_event_message,sd_event_message_from_course,mesh->msg.entry_id);
+			scripts_post_event_console(js.course_script_idx,-1,sd_event_message,sd_event_message_from_course,mesh->msg.entry_id);
+			scripts_post_event_console(obj->script_idx,-1,sd_event_message,sd_event_message_from_course,mesh->msg.entry_id);
 		}
 		
 			// map change messages
@@ -74,10 +84,10 @@ void mesh_triggers(obj_type *obj,int old_mesh_idx,int mesh_idx)
 		if (mesh->msg.map_change_on) {
 			strcpy(map.info.name,mesh->msg.map_name);
 			strcpy(map.info.player_start_name,mesh->msg.map_spot_name);
-			strcpy(map.info.player_start_type,mesh->msg.map_spot_type);
-			map.info.in_load=FALSE;
-
-			server.map_change=TRUE;
+			
+			server.map_change.on=TRUE;
+			server.map_change.skip_media=FALSE;
+			server.map_change.player_restart=FALSE;
 		}
 		
 			// base watch messages
@@ -92,8 +102,8 @@ void mesh_triggers(obj_type *obj,int old_mesh_idx,int mesh_idx)
 			// exit messages
 			
 		if (mesh->msg.exit_on) {
-			scripts_post_event_console(&js.course_attach,sd_event_message,sd_event_message_from_course,mesh->msg.exit_id);
-			scripts_post_event_console(&obj->attach,sd_event_message,sd_event_message_from_course,mesh->msg.exit_id);
+			scripts_post_event_console(js.course_script_idx,-1,sd_event_message,sd_event_message_from_course,mesh->msg.exit_id);
+			scripts_post_event_console(obj->script_idx,-1,sd_event_message,sd_event_message_from_course,mesh->msg.exit_id);
 		}
 		
 			// base watch messages
@@ -108,25 +118,18 @@ void mesh_triggers(obj_type *obj,int old_mesh_idx,int mesh_idx)
   
 ======================================================= */
 
-void run_object_single(obj_type *obj,int tick)
+void run_object_single(obj_type *obj)
 {
-		// spawning
+		// slice setup
 		
-	if (obj->spawning) object_spawn(obj);
-	
-	memmove(&obj->last_pnt,&obj->pnt,sizeof(d3pnt));
-	memmove(&obj->last_ang,&obj->ang,sizeof(d3ang));
-
-		// item counts
-		
-	obj->count++;
-	if (obj->item_count!=0) obj->item_count--;
+	object_slice_setup(obj);
 	
 		// turning and looking
 		
-	if (obj->player) {
-		if (!obj->input_freeze) {
+	if (obj->type==object_type_player) {
+		if (!obj->input.freeze) {
 			object_player_turn(obj);
+			object_player_turn_auto_aim(obj);
 			object_player_look(obj);
 		}
 		else {
@@ -134,11 +137,11 @@ void run_object_single(obj_type *obj,int tick)
 				object_turn(obj);
 			}
 		}
-		object_fs_effect_run(tick,obj);
 	}
 	else {
 		if (!obj->suspend) {
 			object_turn(obj);
+			object_face(obj);
 		}
 	}
 	
@@ -147,6 +150,8 @@ void run_object_single(obj_type *obj,int tick)
 		// watches
 
 	object_watch(obj);
+
+	if (obj->type==object_type_player) object_checkpoint(obj);
 
 		// health recover
 
@@ -170,9 +175,10 @@ void run_object_single(obj_type *obj,int tick)
 		object_ducking(obj);
 
 		object_touch(obj);
-		object_liquid(tick,obj);
+		object_liquid(obj);
 
 		object_crush(obj,FALSE);
+		object_mesh_harm(obj);
 
 		item_pickup_check(obj);
 	}
@@ -180,10 +186,14 @@ void run_object_single(obj_type *obj,int tick)
 		// auto-growing
 
 	object_grow_run(obj);
+
+		// rag dolls
+
+	model_rag_doll_run(&obj->draw);
 	
 		// animation events
 
-	if (obj->player) {
+	if (obj->type==object_type_player) {
 		object_event_animations(obj);
 	}
 	
@@ -198,93 +208,70 @@ void run_object_single(obj_type *obj,int tick)
   
 ======================================================= */
 
-void run_objects_slice(int tick)
+static inline void run_objects_slice_single(obj_type *obj)
 {
-	int				n,mesh_idx;
-	d3pnt			old_pnt;
-	obj_type		*obj;
-
-	obj=server.objs;
-
-	for (n=0;n!=server.count.obj;n++) {
-
-		if ((!obj->scenery.on) && (!obj->hidden)) {
+		// remotes get predicted
 		
-				// remember current position if not suspended
-				// so we can check for mesh changes
-				
-			if (!obj->suspend) {
-				old_pnt.x=obj->pnt.x;
-				old_pnt.y=obj->pnt.y;
-				old_pnt.z=obj->pnt.z;
-			}
-
-				// run objects
-
-			if (obj->remote.on) {
-				remote_predict_move(obj);
-			}
-			else {
-				run_object_single(obj,tick);
-			}
-
-				// trigger any mesh changes if not suspended
-			
-			if (!obj->suspend) {
-			
-				if ((old_pnt.x!=obj->pnt.x) || (old_pnt.y!=obj->pnt.y) || (old_pnt.z!=obj->pnt.z)) {
-				
-					mesh_idx=map_mesh_find(&map,&obj->pnt);
-					if (obj->mesh.cur_mesh_idx!=mesh_idx) {
-						mesh_triggers(obj,obj->mesh.cur_mesh_idx,mesh_idx);
-						obj->mesh.cur_mesh_idx=mesh_idx;
-					}
-					
-				}
-			}
-		}
-		
-		obj++;
+	if ((obj->type==object_type_remote_player) || (obj->type==object_type_remote_object)) {
+		remote_predict_move(obj);
+		return;
 	}
+	
+		// if in network and not host, map bots
+		// get predicted
+		
+	if ((net_setup.mode==net_mode_client) && (obj->type==object_type_bot_map)) {
+		remote_predict_move(obj);
+		return;
+	}
+	
+		// everything else is a regular move
+	
+	run_object_single(obj);
 }
 
-void run_objects_no_slice(int tick)
+void run_objects_slice(void)
 {
 	int				n;
 	obj_type		*obj;
-	weapon_type		*weap;
 
-	obj=server.objs;
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
 
-	for (n=0;n!=server.count.obj;n++) {
+		if ((!obj->scenery.on) && (!obj->hidden)) {
+			run_objects_slice_single(obj);
+			if ((!obj->suspend) && (obj->type!=object_type_remote_player) && (obj->type!=object_type_remote_object)) mesh_triggers(obj);
+		}
+	}
+}
+
+void run_objects_no_slice(void)
+{
+	int				n;
+	obj_type		*obj;
+
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
+	
+		object_check_respawn(obj);
 
 		if (!obj->hidden) {
 			
-			model_draw_setup_object(tick,obj);
-			model_run_animation(&obj->draw);
+			model_draw_setup_object(obj);
+			model_run_animation(&obj->draw,game_time_get());
 
 			if (!obj->scenery.on) {
-
-					// fades
-
-				model_fade_run(tick,&obj->draw);
-				model_mesh_fade_run(tick,&obj->draw);
-
-					// held weapons
-
-				if (obj->player) {
-					weap=weapon_find_current(obj);
-					if (weap!=NULL) {
-						model_draw_setup_weapon(tick,obj,weap,FALSE,FALSE);
-						weapon_run_hand(obj,tick);
-					}
-				}
-
+				model_fade_run(&obj->draw);
+				model_mesh_fade_run(&obj->draw);
 			}
 		}
-		
-		obj++;
 	}
+	
+		// weapons in hand
+		
+	if (!app.dedicated_host) weapon_player_run_hand();
 }
 
 /* =======================================================
@@ -293,63 +280,38 @@ void run_objects_no_slice(int tick)
       
 ======================================================= */
 
-void run_projectiles_slice(int tick)
+void run_projectiles_slice(void)
 {
 	int				n;
 	proj_type		*proj;
 	
-	for (n=0;n!=server.count.proj;n++) {
-		proj=&server.projs[n];
-
-		object_clear_contact(&proj->contact);
+	for (n=0;n!=max_proj_list;n++) {
+		proj=server.proj_list.projs[n];
+		if (!proj->on) continue;
 	   
-			// projectile counts
-			
-		proj->count++;
-		if (proj->parent_grace>0) proj->parent_grace--;
-
-			// moving projectiles
-			
-		if (!proj->stick) {
-			projectile_speed(proj);
-
-			if (projectile_move(proj)) {
-				projectile_mark_dispose(proj);
-				continue;
-			}
-			
-			projectile_gravity(proj);
-		}
+		projectile_slice_setup(proj);
 		
-			// stuck projectiles
+		if (projectile_hit_auto(proj)) continue;
 			
-		else {
-			projectile_stick(proj);
-		}
-		
-		projectile_collision(proj);
-		
-		if (projectile_hit(tick,proj,FALSE)) {
-			projectile_mark_dispose(proj);
-		}
+		projectile_speed(proj);
+		projectile_gravity(proj);
+		projectile_move(proj);
 	}
-		
-	projectile_dispose();
 }
 
-void run_projectiles_no_slice(int tick)
+void run_projectiles_no_slice(void)
 {
 	int				n;
 	proj_type		*proj;
 
-	proj=server.projs;
+	for (n=0;n!=max_proj_list;n++) {
+		proj=server.proj_list.projs[n];
+		if (!proj->on) continue;
 	
-	for (n=0;n!=server.count.proj;n++) {
-		model_draw_setup_projectile(tick,proj);
-		model_run_animation(&proj->draw);
-		model_fade_run(tick,&proj->draw);
-		model_mesh_fade_run(tick,&proj->draw);
-		proj++;
+		model_draw_setup_projectile(proj);
+		model_run_animation(&proj->draw,game_time_get());
+		model_fade_run(&proj->draw);
+		model_mesh_fade_run(&proj->draw);
 	}
 }
 
@@ -359,43 +321,46 @@ void run_projectiles_no_slice(int tick)
       
 ======================================================= */
 
-void server_run(int tick)
+void server_run(void)
 {
-	obj_type		*obj;
-
-		// get player object
-		
-	obj=object_find_uid(server.player_obj_uid);
+	int				tick;
 	
 		// time to run tasks
-		
+
+	tick=game_time_get();
+
 	if (tick>=server.time.run_tick) {
-	
+
+			// tasks that do not require
+			// 1/100th of an operation but a specific
+			// tick count
+
+		run_objects_no_slice();
+		run_projectiles_no_slice();
+
 			// tasks that require 1/100th of
 			// a second operation
 			
 		while (tick>=server.time.run_tick) {
 			server.time.run_tick+=10;
 
+			collide_setup();
+
 			group_moves_run(TRUE);
+			cinema_run();
 			
-			run_objects_slice(tick);
-			run_projectiles_slice(tick);
+			run_objects_slice();
+			run_projectiles_slice();
 			
 			map_movements_auto_open();
 			
-			camera_run();
-			weapon_hand_bounce(obj);
-		
+			if (!app.dedicated_host) {
+				camera_server_run();
+				weapon_player_hand_bounce();
+			}
+
 			particle_map_run();
 		}
-
-			// tasks that do not require
-			// 1/100th of an operation but a specific
-			// tick count
-
-		run_objects_no_slice(tick);
-		run_projectiles_no_slice(tick);
 
 			// effects and decal time-outs
 		

@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,8 +29,8 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "models.h"
 
 extern map_type				map;
 extern server_type			server;
@@ -43,7 +43,8 @@ extern server_type			server;
 
 void scenery_create(void)
 {
-	int					n;
+	int					n,idx;
+	char				err_str[256];
 	map_scenery_type	*map_scenery;
 	obj_type			*obj;
 	model_type			*model;
@@ -51,15 +52,22 @@ void scenery_create(void)
 	map_scenery=map.sceneries;
 
 	for (n=0;n!=map.nscenery;n++) {
+		map_scenery=&map.sceneries[n];
+	
+			// no object is no model
+			
+		if (map_scenery->model_name[0]==0x0) continue;
 
 			// create new object
 
-		obj=object_create(bt_map,-1);
-		if (obj==NULL) break;
+		idx=object_create(map_scenery->model_name,object_type_object,bt_map);
+		if (idx==-1) break;
+
+		obj=server.obj_list.objs[idx];
 
 			// no scripts, events, etc
 
-		obj->attach.script_uid=-1;
+		obj->script_idx=-1;
 
 			// create as scenery
 
@@ -79,8 +87,6 @@ void scenery_create(void)
 		obj->contact.force_on=FALSE;
 		obj->hit_box.on=map_scenery->contact_hit_box;
 
-		strcpy(obj->name,map_scenery->model_name);
-		strcpy(obj->type,"Scenery");
 		strcpy(obj->draw.name,map_scenery->model_name);
 		
 		obj->draw.on=TRUE;
@@ -88,28 +94,34 @@ void scenery_create(void)
 		obj->draw.shadow.on=map_scenery->shadow;
 		obj->draw.resize=map_scenery->resize;
 
-			// needs spawn mesh
+			// needs current mesh
 
-		object_set_spawn_mesh(obj);
+		object_set_current_mesh(obj);
 		
 			// load the model
 			
-		model_load_and_init(&obj->draw);
+		if (!model_draw_load(&obj->draw,"Scenery",obj->name,FALSE,err_str)) {
+			console_add_error(err_str);
+			object_dispose_single(idx);
+			continue;
+		}
 		
 			// check if there are no hit boxes
 			// if so, turn off hit box only checking
 			
 		if (obj->hit_box.on) {
-			model=model_find_uid(obj->draw.uid);
-			if (model==NULL) {
+			if (obj->draw.model_idx==-1) {
 				obj->hit_box.on=FALSE;
 			}
 			else {
+				model=server.model_list.models[obj->draw.model_idx];
 				if (model->nhit_box==0) obj->hit_box.on=FALSE;
 			}
 		}
 
-		map_scenery++;
+			// scenery is never remoted
+
+		obj->remote.net_uid=-1;
 	}
 }
 
@@ -125,31 +137,28 @@ void scenery_start(void)
 	map_scenery_type	*map_scenery;
 	obj_type			*obj;
 
-	obj=server.objs;
-
-	for (n=0;n!=server.count.obj;n++) {
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
 	
-		if (obj->scenery.on) {
+		if (!obj->scenery.on) continue;
 		
-			map_scenery=&map.sceneries[obj->scenery.idx];
-			
-			obj->size.x=obj->draw.size.x;
-			obj->size.y=obj->draw.size.y;
-			obj->size.z=obj->draw.size.z;
+		map_scenery=&map.sceneries[obj->scenery.idx];
 		
-			object_set_radius(obj);
+		obj->size.x=obj->draw.size.x;
+		obj->size.y=obj->draw.size.y;
+		obj->size.z=obj->draw.size.z;
+		
+			// change texture frames
 			
-				// change texture frames
-				
-			for (k=0;k!=max_map_scenery_model_texture_frame;k++) {
-				obj->draw.cur_texture_frame[k]=(unsigned char)map_scenery->texture_frame[k];
-			}
-				
-				// start scenery animation
-				
-			if (map_scenery->animation_name[0]!=0x0) model_start_animation(&obj->draw,map_scenery->animation_name);
+		for (k=0;k!=max_map_scenery_model_texture_frame;k++) {
+			obj->draw.textures[k].animation_on=FALSE;
+			obj->draw.textures[k].animation_reverse=FALSE;
+			obj->draw.textures[k].frame=map_scenery->texture_frame[k];
 		}
-		
-		obj++;
+			
+			// start scenery animation
+			
+		if (map_scenery->animation_name[0]!=0x0) model_start_animation(&obj->draw,map_scenery->animation_name,game_time_get());
 	}
 }

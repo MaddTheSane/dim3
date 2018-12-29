@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -36,28 +36,27 @@ extern map_type			map;
 extern server_type		server;
 extern js_type			js;
 
-JSBool js_obj_vehicle_get_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_obj_vehicle_get_hasOccupant(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_obj_vehicle_set_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_obj_vehicle_enter_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_obj_vehicle_exit_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_obj_vehicle_remove_occupant_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
+JSValueRef js_obj_vehicle_get_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_obj_vehicle_get_hasOccupant(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+bool js_obj_vehicle_set_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception);
+JSValueRef js_obj_vehicle_enter_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_obj_vehicle_enter_by_id_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_obj_vehicle_exit_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_obj_vehicle_remove_occupant_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
 
-JSClass			obj_vehicle_class={"obj_vehicle_class",0,
-							script_add_property,JS_PropertyStub,
-							JS_PropertyStub,JS_PropertyStub,
-							JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub,JS_FinalizeStub};
+JSStaticValue 		obj_vehicle_props[]={
+							{"on",					js_obj_vehicle_get_on,				js_obj_vehicle_set_on,		kJSPropertyAttributeDontDelete},
+							{"hasOccupant",			js_obj_vehicle_get_hasOccupant,		NULL,						kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{0,0,0,0}};
 
-script_js_property	obj_vehicle_props[]={
-							{"on",					js_obj_vehicle_get_on,				js_obj_vehicle_set_on},
-							{"hasOccupant",			js_obj_vehicle_get_hasOccupant,		NULL},
-							{0}};
+JSStaticFunction	obj_vehicle_functions[]={
+							{"enter",				js_obj_vehicle_enter_func,			kJSPropertyAttributeDontDelete},
+							{"enterById",			js_obj_vehicle_enter_by_id_func,	kJSPropertyAttributeDontDelete},
+							{"exit",				js_obj_vehicle_exit_func,			kJSPropertyAttributeDontDelete},
+							{"removeOccupant",		js_obj_vehicle_exit_func,			kJSPropertyAttributeDontDelete},
+							{0,0,0}};
 
-script_js_function	obj_vehicle_functions[]={
-							{"enter",				js_obj_vehicle_enter_func,			0},
-							{"exit",				js_obj_vehicle_exit_func,			0},
-							{"removeOccupant",		js_obj_vehicle_exit_func,			0},
-							{0}};
+JSClassRef			obj_vehicle_class;
 
 /* =======================================================
 
@@ -65,9 +64,19 @@ script_js_function	obj_vehicle_functions[]={
       
 ======================================================= */
 
-void script_add_obj_vehicle_object(JSObject *parent_obj)
+void script_init_obj_vehicle_object(void)
 {
-	script_create_child_object(parent_obj,"vehicle",&obj_vehicle_class,obj_vehicle_props,obj_vehicle_functions);
+	obj_vehicle_class=script_create_class("obj_vehicle_class",obj_vehicle_props,obj_vehicle_functions);
+}
+
+void script_free_obj_vehicle_object(void)
+{
+	script_free_class(obj_vehicle_class);
+}
+
+JSObjectRef script_add_obj_vehicle_object(JSContextRef cx,JSObjectRef parent_obj,int script_idx)
+{
+	return(script_create_child_object(cx,parent_obj,obj_vehicle_class,"vehicle",script_idx));
 }
 
 /* =======================================================
@@ -76,24 +85,20 @@ void script_add_obj_vehicle_object(JSObject *parent_obj)
       
 ======================================================= */
 
-JSBool js_obj_vehicle_get_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_obj_vehicle_get_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	obj_type		*obj;
 
-	obj=object_find_uid(js.attach.thing_uid);
-	*vp=BOOLEAN_TO_JSVAL(obj->vehicle.on);
-	
-	return(JS_TRUE);
+	obj=object_get_attach(j_obj);
+	return(script_bool_to_value(cx,obj->vehicle.on));
 }
 
-JSBool js_obj_vehicle_get_hasOccupant(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_obj_vehicle_get_hasOccupant(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	obj_type		*obj;
 
-	obj=object_find_uid(js.attach.thing_uid);
-	*vp=BOOLEAN_TO_JSVAL(obj->vehicle.attach_obj_uid!=-1);
-	
-	return(JS_TRUE);
+	obj=object_get_attach(j_obj);
+	return(script_bool_to_value(cx,obj->vehicle.attach_obj_idx!=-1));
 }
 
 /* =======================================================
@@ -102,14 +107,14 @@ JSBool js_obj_vehicle_get_hasOccupant(JSContext *cx,JSObject *j_obj,jsval id,jsv
       
 ======================================================= */
 
-JSBool js_obj_vehicle_set_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+bool js_obj_vehicle_set_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception)
 {
 	obj_type		*obj;
 	
-	obj=object_find_uid(js.attach.thing_uid);
-	obj->vehicle.on=JSVAL_TO_BOOLEAN(*vp);
-	
-	return(JS_TRUE);
+	obj=object_get_attach(j_obj);
+	obj->vehicle.on=script_value_to_bool(cx,vp);
+
+	return(TRUE);
 }
 
 /* =======================================================
@@ -118,33 +123,54 @@ JSBool js_obj_vehicle_set_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
       
 ======================================================= */
 
-JSBool js_obj_vehicle_enter_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_obj_vehicle_enter_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	char			err_str[256];
 	obj_type		*obj;
 	
-	obj=object_find_uid(js.attach.thing_uid);
+	if (!script_check_param_count(cx,func,argc,0,exception)) return(script_null_to_value(cx));
+	
+	obj=object_get_attach(j_obj);
 
-	if (!object_enter_vehicle(obj,err_str)) {
-		JS_ReportError(js.cx,"Vehicle: %s",err_str);
-		return(JS_FALSE);
+	if (!object_enter_vehicle(obj,-1,err_str)) {
+		*exception=script_create_exception(cx,err_str);
 	}
 
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
-JSBool js_obj_vehicle_exit_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_obj_vehicle_enter_by_id_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
+{
+	char			err_str[256];
+	obj_type		*obj,*vehicle_obj;
+	
+	if (!script_check_param_count(cx,func,argc,1,exception)) return(script_null_to_value(cx));
+	
+	obj=object_get_attach(j_obj);
+
+	vehicle_obj=script_find_obj_from_uid_arg(cx,argv[0],exception);
+	if (vehicle_obj==NULL) return(script_null_to_value(cx));
+
+	if (!object_enter_vehicle(obj,vehicle_obj->idx,err_str)) {
+		*exception=script_create_exception(cx,err_str);
+	}
+
+	return(script_null_to_value(cx));
+}
+
+JSValueRef js_obj_vehicle_exit_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	char			err_str[256];
 	obj_type		*obj;
 	
-	obj=object_find_uid(js.attach.thing_uid);
+	if (!script_check_param_count(cx,func,argc,0,exception)) return(script_null_to_value(cx));
+	
+	obj=object_get_attach(j_obj);
 
-	if (!object_exit_vehicle(obj,FALSE,err_str)) {
-		JS_ReportError(js.cx,"Vehicle: %s",err_str);
-		return(JS_FALSE);
+	if (!object_exit_vehicle(obj,TRUE,err_str)) {
+		*exception=script_create_exception(cx,err_str);
 	}
 
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 

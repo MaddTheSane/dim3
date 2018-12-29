@@ -61,6 +61,21 @@ and can be sold or given away.
 //
 
 #define D3_OS_LINUX			    1
+#undef D3_OPENGL_ES
+#undef D3_ROTATE_VIEW
+
+//
+// os specific keys
+//
+
+#define D3_KEY_TAB				0x9
+#define D3_KEY_ESC				0x1B
+#define D3_KEY_BACKSPACE		0x8
+#define D3_KEY_DELETE			0x2E
+#define D3_KEY_LEFT				0x25
+#define D3_KEY_RIGHT			0x27
+#define D3_KEY_UP				0x26
+#define D3_KEY_DOWN				0x28
 
 //
 // os specific types
@@ -77,3 +92,5 @@ typedef int						d3socket;
 #define D3_NULL_SOCKET			-1
 
 #define closesocket(x)			close(x)
+
+#define D3_APP_EXTENSION		"a"

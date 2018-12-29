@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,10 +29,7 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "lights.h"
-#include "video.h"
-
-extern bool					dim3_debug;
+#include "interface.h"
 
 extern map_type				map;
 extern view_type			view;
@@ -40,450 +37,372 @@ extern setup_type			setup;
 
 /* =======================================================
 
-      Setup Vertex, UV, and possible Color List for Meshes
+      Initialize VBOs For Meshes
       
 ======================================================= */
 
-bool view_compile_mesh_gl_list_init(void)
+bool view_map_vbo_initialize_mesh(map_mesh_type *mesh)
 {
-	int					n,k,t,uv_idx,vertex_cnt,i_idx;
-	unsigned int		v_poly_start_idx;
-	unsigned int		*index_ptr;
-	float				x_shift_offset,y_shift_offset;
-	float				*vertex_ptr,*pv,*pp,*pc;
+	int					n,k;
+	unsigned short		idx;
+	unsigned short		*index_ptr;
+	float				*pf;
+	unsigned char		*vertex_ptr,*vp;
 	d3pnt				*pnt;
-	map_mesh_type		*mesh;
 	map_mesh_poly_type	*poly;
-
-		// get total number of vertexes and indexes
-		// and their offsets to setup vertex object for map
-		
-	vertex_cnt=0;
 	
-		// setup meshes
-		
-	mesh=map.mesh.meshes;
+		// setup vertex pointer
 
-	for (n=0;n!=map.mesh.nmesh;n++) {
-
-			// mesh has not been moved
-
-		mesh->draw.moved=FALSE;
-
-			// setup offsets
-
-		mesh->draw.vertex_offset=vertex_cnt;
-
-			// poly vertexes and uv counts
-			
-		poly=mesh->polys;
-		
-		for (k=0;k!=mesh->npoly;k++) {
-			poly->draw.vertex_offset=vertex_cnt;
-			vertex_cnt+=poly->ptsz;
-			poly++;
-		}
-		
-		mesh++;
-	}
-
-		// total vertexes
-
-	map.mesh.vbo_vertex_count=vertex_cnt;
-
-		// initial vertex VBO
-		// we need a UV list for every possible layer
-		
-	view_init_map_vertex_object((vertex_cnt*(3+3))+((vertex_cnt*max_mesh_poly_uv_layer)*2));
-
-	vertex_ptr=view_bind_map_map_vertex_object();
-	if (vertex_ptr==NULL) return(FALSE);
-
-	pv=vertex_ptr;
-	pc=pv+(vertex_cnt*3);
-	pp=pv+(vertex_cnt*(3+3));
-	
-		// vertexes and color
-		// we run this separate from the UVs
-		// as they are grouped for layers
-
-	mesh=map.mesh.meshes;
-
-	for (n=0;n!=map.mesh.nmesh;n++) {
-	
-			// vertexes and colors
-
-		poly=mesh->polys;
-		
-		for (k=0;k!=mesh->npoly;k++) {
-
-			for (t=0;t!=poly->ptsz;t++) {
-			
-				pnt=&mesh->vertexes[poly->v[t]];
-
-				*pv++=(float)pnt->x;
-				*pv++=(float)pnt->y;
-				*pv++=(float)pnt->z;
-
-				*pc++=1.0f;
-				*pc++=1.0f;
-				*pc++=1.0f;
-			}
-
-			poly++;
-		}
-		
-		mesh++;
-	}
-	
-		// uvs
-				
-	for (uv_idx=0;uv_idx!=max_mesh_poly_uv_layer;uv_idx++) {
-
-		mesh=map.mesh.meshes;
-
-		for (n=0;n!=map.mesh.nmesh;n++) {
-		
-			poly=mesh->polys;
-
-				// mesh has a UV for this layer
-
-			if (mesh->nuv>uv_idx) {
-				
-				for (k=0;k!=mesh->npoly;k++) {
-				
-					if (uv_idx==0) {
-						x_shift_offset=poly->draw.x_shift_offset;
-						y_shift_offset=poly->draw.y_shift_offset;
-					}
-					else {
-						x_shift_offset=y_shift_offset=0.0f;
-					}
-					
-					for (t=0;t!=poly->ptsz;t++) {
-						*pp++=poly->uv[uv_idx].x[t]+x_shift_offset;
-						*pp++=poly->uv[uv_idx].y[t]+y_shift_offset;
-					}
-
-					poly++;
-				}
-			}
-
-				// mesh does not have a UV for this layer
-
-			else {
-
-				for (k=0;k!=mesh->npoly;k++) {
-					for (t=0;t!=poly->ptsz;t++) {
-						*pp++=0.0f;
-						*pp++=0.0f;
-					}
-
-					poly++;
-				}
-			}
-
-			mesh++;
-		}
-	}
-
-		// unmap vertex VBO
-		
-	view_unmap_map_vertex_object();
-	view_unbind_map_vertex_object();
-
-		// initialize index VBO
-		
-	view_init_map_index_object(vertex_cnt);
-		
-	index_ptr=view_bind_map_map_index_object();
-	if (index_ptr==NULL) {
-		view_unmap_map_vertex_object();
-		view_unbind_map_vertex_object();
+	view_bind_mesh_liquid_vertex_object(&mesh->vbo);
+	vertex_ptr=view_map_mesh_liquid_vertex_object(&mesh->vbo);
+	if (vertex_ptr==NULL) {
+		view_unbind_mesh_liquid_vertex_object();
 		return(FALSE);
 	}
 
-		// map the indexes
+		// vertexes, uvs, tangents, normals
+		
+	vp=vertex_ptr;
 
-	i_idx=0;
+	poly=mesh->polys;
 	
+	for (n=0;n!=mesh->npoly;n++) {
+	
+		for (k=0;k!=poly->ptsz;k++) {
+		
+			pnt=&mesh->vertexes[poly->v[k]];
+			
+			pf=(float*)vp;
+
+			*pf++=(float)pnt->x;
+			*pf++=(float)pnt->y;
+			*pf++=(float)pnt->z;
+			
+			*pf++=poly->main_uv.uvs[k].x+poly->draw.shift_offset.x;
+			*pf++=poly->main_uv.uvs[k].y+poly->draw.shift_offset.y;
+			
+			*pf++=poly->lmap_uv.uvs[k].x;
+			*pf++=poly->lmap_uv.uvs[k].y;
+
+			*pf++=poly->tangent_space.tangent.x;
+			*pf++=poly->tangent_space.tangent.y;
+			*pf++=poly->tangent_space.tangent.z;
+			*pf++=poly->tangent_space.normal.x;
+			*pf++=poly->tangent_space.normal.y;
+			*pf++=poly->tangent_space.normal.z;
+			
+			vp+=mesh->vbo.vertex_stride;
+		}
+
+		poly++;
+	}
+
+	view_unmap_mesh_liquid_vertex_object();
+	view_unbind_mesh_liquid_vertex_object();
+
+		// create the indexes
+
+	view_bind_mesh_liquid_index_object(&mesh->vbo);
+	
+	index_ptr=view_map_mesh_liquid_index_object();
+	if (index_ptr==NULL) {
+		view_unbind_mesh_liquid_index_object();
+		return(FALSE);
+	}
+
+	idx=0;
+
+	poly=mesh->polys;
+		
+	for (n=0;n!=mesh->npoly;n++) {
+		
+		poly->vbo.index_offset=idx*sizeof(unsigned short);
+		
+		for (k=0;k!=poly->ptsz;k++) {
+			*index_ptr++=(unsigned short)idx;
+			idx++;
+		}
+
+		poly++;
+	}
+
+	view_unmap_mesh_liquid_index_object();
+	view_unbind_mesh_liquid_index_object();
+
+		// reset some flags that
+		// optimize when the VBO is rebuilt
+
+	mesh->draw.moved=FALSE;
+	mesh->draw.cur_ambient_only=FALSE;
+
+	return(TRUE);
+}
+
+/* =======================================================
+
+      Initialize VBOs For Liquids
+      
+======================================================= */
+
+bool view_map_vbo_initialize_liquid(map_liquid_type *liq)
+{
+	int				n,idx;
+	unsigned short	*index_ptr;
+
+		// only setup indexes for liquids
+
+	view_bind_mesh_liquid_index_object(&liq->vbo);
+	
+	index_ptr=view_map_mesh_liquid_index_object();
+	if (index_ptr==NULL) {
+		view_unbind_mesh_liquid_index_object();
+		return(FALSE);
+	}
+
+	idx=0;
+
+	for (n=0;n!=liq->vbo.index_count;n++) {
+		*index_ptr++=(unsigned short)idx;
+		idx++;
+	}
+
+	view_unmap_mesh_liquid_index_object();
+	view_unbind_mesh_liquid_index_object();
+
+	return(TRUE);
+}
+
+/* =======================================================
+
+      Initialize VBOs For Map
+      
+======================================================= */
+
+bool view_map_vbo_initialize(void)
+{
+	int					n,k,vertex_cnt,index_cnt,stride,
+						liq_div_count;
+	map_mesh_type		*mesh;
+	map_mesh_poly_type	*poly;
+	map_liquid_type		*liq;
+
+		// meshes
+
 	mesh=map.mesh.meshes;
 
 	for (n=0;n!=map.mesh.nmesh;n++) {
-	
-			// run through the polys
 
+			// get index count
+
+		index_cnt=0;
 		poly=mesh->polys;
 		
 		for (k=0;k!=mesh->npoly;k++) {
+			index_cnt+=poly->ptsz;
+			poly++;
+		}
+
+			// get vertex count
+
+		vertex_cnt=index_cnt;
 		
-				// polygon indexes
-				
-			v_poly_start_idx=poly->draw.vertex_offset;
-			poly->draw.gl_poly_index_offset=i_idx*sizeof(unsigned int);
-				
-			for (t=0;t!=poly->ptsz;t++) {
-				*index_ptr++=v_poly_start_idx+t;
-				i_idx++;
-			}
+		stride=(3+2+2+3+3)*sizeof(float);			// 3 vertex, 2 uv, 2 light map uv, 3 tangent, 3 normal
+
+			// create the VBO
 			
-				// min/max for range element draws
+		view_create_mesh_liquid_vertex_object(&mesh->vbo,vertex_cnt,stride,index_cnt);
+
+		if (!view_map_vbo_initialize_mesh(mesh)) return(FALSE);
+
+		mesh++;
+	}
+
+		// liquids
+
+	liq=map.liquid.liquids;
+
+	for (n=0;n!=map.liquid.nliquid;n++) {
+
+			// liquids can be broken up for waves,
+			// with 2 vertexes per wave and 4 indexes
+			// to draw the triangles
+
+		liq_div_count=liquid_wave_get_divisions(liq);
+
+		index_cnt=(liq_div_count+1)*2;				// strip drawing, so only one per vertex
+		vertex_cnt=(liq_div_count+1)*2;
+
+		stride=(3+2+2+3+3)*sizeof(float);				// 3 vertex, 2 uv, 2 light map uv, 3 tangent, 3 normal
+
+			// create the liquid
+
+		view_create_mesh_liquid_vertex_object(&liq->vbo,vertex_cnt,stride,index_cnt);
+
+			// initialize the liquid
+
+		if (!view_map_vbo_initialize_liquid(liq)) return(FALSE);
+		liq++;
+	}
+
+	return(TRUE);
+}
+
+void view_map_vbo_release(void)
+{
+	int					n;
+	map_mesh_type		*mesh;
+	map_liquid_type		*liq;
+
+		// release meshes
+		// color caches get released when mesh is destroyed
+
+	mesh=map.mesh.meshes;
+
+	for (n=0;n!=map.mesh.nmesh;n++) {
+		view_dispose_mesh_liquid_vertex_object(&mesh->vbo);
+		mesh++;
+	}
+
+		// release liquids
+
+	liq=map.liquid.liquids;
+
+	for (n=0;n!=map.liquid.nliquid;n++) {
+		view_dispose_mesh_liquid_vertex_object(&liq->vbo);
+		liq++;
+	}
+
+}
+
+/* =======================================================
+
+      Rebuild VBOs For Map Changes
+      
+======================================================= */
+
+void view_map_vbo_rebuild_mesh(map_mesh_type *mesh)
+{
+	int					n,k;
+	float				x_shift_offset,y_shift_offset;
+	float				*pf;
+	unsigned char		*vertex_ptr,*vp;
+	d3pnt				*pnt;
+	map_mesh_poly_type	*poly;
+
+		// we don't immediately bind and map
+		// until we actually require a change
+		
+	vertex_ptr=NULL;
+	
+	if ((mesh->flag.moveable) && (mesh->draw.moved)) {
+	
+		if (vertex_ptr==NULL) {
+			view_bind_mesh_liquid_vertex_object(&mesh->vbo);
+			vertex_ptr=view_map_mesh_liquid_vertex_object(&mesh->vbo);
+			if (vertex_ptr==NULL) {
+				view_unbind_mesh_liquid_vertex_object();
+				return;
+			}
+		}
+
+		vp=vertex_ptr;
+
+		poly=mesh->polys;
+		
+		for (n=0;n!=mesh->npoly;n++) {
+
+				// polygon vertexes
+
+			for (k=0;k!=poly->ptsz;k++) {
+			
+				pnt=&mesh->vertexes[poly->v[k]];
 				
-			poly->draw.gl_poly_index_min=v_poly_start_idx;
-			poly->draw.gl_poly_index_max=v_poly_start_idx+poly->ptsz;
+				pf=(float*)vp;
+
+				*pf++=(float)pnt->x;
+				*pf++=(float)pnt->y;
+				*pf++=(float)pnt->z;
+				
+				pf+=4;
+				
+				*pf++=poly->tangent_space.tangent.x;
+				*pf++=poly->tangent_space.tangent.y;
+				*pf++=poly->tangent_space.tangent.z;
+				*pf++=poly->tangent_space.normal.x;
+				*pf++=poly->tangent_space.normal.y;
+				*pf++=poly->tangent_space.normal.z;
+				
+				vp+=mesh->vbo.vertex_stride;
+			}
 
 			poly++;
 		}
 		
-		mesh++;
+			// only rebuild when moving
+			
+		mesh->draw.moved=FALSE;
+	}
+
+		// recalculate the uvs if this
+		// mesh has shiftable uvs
+
+	if (mesh->precalc_flag.shiftable) {
+	
+		if (vertex_ptr==NULL) {
+			view_bind_mesh_liquid_vertex_object(&mesh->vbo);
+			vertex_ptr=view_map_mesh_liquid_vertex_object(&mesh->vbo);
+			if (vertex_ptr==NULL) {
+				view_unbind_mesh_liquid_vertex_object();
+				return;
+			}
+		}
+
+			// only shift main UVs (not light mapped ones)
+
+		vp=vertex_ptr;
+		
+		poly=mesh->polys;
+
+		for (n=0;n!=mesh->npoly;n++) {
+
+			x_shift_offset=poly->draw.shift_offset.x;
+			y_shift_offset=poly->draw.shift_offset.y;
+
+			for (k=0;k!=poly->ptsz;k++) {
+				pf=(float*)(vp+(3*sizeof(float)));
+				
+				*pf++=poly->main_uv.uvs[k].x+x_shift_offset;
+				*pf=poly->main_uv.uvs[k].y+y_shift_offset;
+				
+				vp+=mesh->vbo.vertex_stride;
+			}
+
+			poly++;
+		}
 	}
 	
-		// unmap index VBO
-
-	view_unmap_map_index_object();
-	view_unbind_map_index_object();
-
-	return(TRUE);
+		// if we made a change, then it got
+		// mapped and we need to unmap it
+		
+	if (vertex_ptr!=NULL) {
+		view_unmap_mesh_liquid_vertex_object();
+		view_unbind_mesh_liquid_vertex_object();
+	}
 }
 
-void view_compile_mesh_gl_list_free(void)
+void view_map_vbo_rebuild(void)
 {
-}
-
-/* =======================================================
-
-      Compile OpenGL Lists MainLine
-      
-======================================================= */
-
-bool view_compile_mesh_gl_lists(int tick)
-{
-	int							n,k,t,uv_idx,vertex_cnt;
-	float						x_shift_offset,y_shift_offset;
-	float						*vertex_ptr,*pv,*pp,*pc;
-	d3pnt						*pnt;
-	map_mesh_type				*mesh;
-	map_mesh_poly_type			*poly;
-
-		// total number of vertexes
-
-	vertex_cnt=map.mesh.vbo_vertex_count;
-
-		// map VBO to memory
-
-	vertex_ptr=view_bind_map_map_vertex_object();
-	if (vertex_ptr==NULL) return(FALSE);
+	int				n;
+	map_mesh_type	*mesh;
 	
-		// run throught the meshes
-		// in this scene and update any
-		// relevant data
-
+		// run through all meshes in
+		// view list
+		
 	for (n=0;n!=view.render->draw_list.count;n++) {
-
 		if (view.render->draw_list.items[n].type!=view_render_type_mesh) continue;
 
 		mesh=&map.mesh.meshes[view.render->draw_list.items[n].idx];
-
-			// recalculate the vertexes if this
-			// mesh is moving
-
-		if (mesh->draw.moved) {
-
-			pv=vertex_ptr+(mesh->draw.vertex_offset*3);
-
-			poly=mesh->polys;
-			
-			for (k=0;k!=mesh->npoly;k++) {
-
-					// polygon vertexes
-
-				for (t=0;t!=poly->ptsz;t++) {
-				
-					pnt=&mesh->vertexes[poly->v[t]];
-
-					*pv++=(float)pnt->x;
-					*pv++=(float)pnt->y;
-					*pv++=(float)pnt->z;
-				}
-
-				poly++;
-			}
-		}
-
-			// recalculate the uvs if this
-			// mesh has shiftable uvs
-
-		if (mesh->flag.shiftable) {
-
-				// the UV layers
-			
-			for (uv_idx=0;uv_idx!=mesh->nuv;uv_idx++) {
-			
-					// only redo layers that are in use
-
-				if (mesh->nuv>uv_idx) {
-					
-					pp=vertex_ptr+((vertex_cnt*(3*3))+((vertex_cnt*uv_idx)*2))+(mesh->draw.vertex_offset*2);
-					poly=mesh->polys;
-
-					for (k=0;k!=mesh->npoly;k++) {
-
-						if (uv_idx==0) {
-							x_shift_offset=poly->draw.x_shift_offset;
-							y_shift_offset=poly->draw.y_shift_offset;
-						}
-						else {
-							x_shift_offset=y_shift_offset=0.0f;
-						}
-
-						for (t=0;t!=poly->ptsz;t++) {
-							*pp++=poly->uv[uv_idx].x[t]+x_shift_offset;
-							*pp++=poly->uv[uv_idx].y[t]+y_shift_offset;
-						}
-
-						poly++;
-					}
-				}
-			}
-		}
-
-			// if in debug, we are using high lighting,
-			// so recalculate the lights for the mesh
-
-		if ((dim3_debug) || (mesh->flag.hilite)) {
-			
-			pc=vertex_ptr+((vertex_cnt*3)+(mesh->draw.vertex_offset*3));
-
-			poly=mesh->polys;
-				
-			for (k=0;k!=mesh->npoly;k++) {
-				for (t=0;t!=poly->ptsz;t++) {
-					*pc++=1.0f;
-					*pc++=1.0f;
-					*pc++=1.0f;
-				}
-				poly++;
-			}
-		}
-
-			// if the mesh has some non-shaders in it,
-			// recalculate the lighting
-			// supergumba -- this needs to be optimized 
-
-		else {
-
-			if (mesh->draw.has_no_shader) {
-
-				pc=vertex_ptr+((vertex_cnt*3)+(mesh->draw.vertex_offset*3));
-
-				poly=mesh->polys;
-				
-				for (k=0;k!=mesh->npoly;k++) {
-
-					for (t=0;t!=poly->ptsz;t++) {
-						pnt=&mesh->vertexes[poly->v[t]];
-						gl_lights_calc_vertex((double)pnt->x,(double)pnt->y,(double)pnt->z,pc);
-						pc+=3;
-					}
-
-					poly++;
-				}
-			}
-		}
-
-			// reset the moved list so we'll catch
-			// and update any moved vertexes next time
-			// we hit this function
-
-		mesh->draw.moved=FALSE;
-
-		mesh++;
+		view_map_vbo_rebuild_mesh(mesh);
 	}
-
-		// unmap VBO
-
-	view_unmap_map_vertex_object();
-	view_unbind_map_vertex_object();
-	
-	return(TRUE);
 }
 
-/* =======================================================
-
-      Use Map OpenGL Lists
-      
-======================================================= */
-
-void view_compile_gl_list_attach(void)
-{
-		// use last compiled buffer
-
-	view_bind_map_vertex_object();
-	view_bind_map_index_object();
-
-		// vertexes
-
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(3,GL_FLOAT,0,(void*)0);
-}
-
-void view_compile_gl_list_attach_uv_normal(void)
-{
-	int			offset;
-
-	offset=((map.mesh.vbo_vertex_count*(3+3))+(map.mesh.vbo_vertex_count*2))*sizeof(float);
-
-	glClientActiveTexture(GL_TEXTURE1);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)offset);
-	
-	offset=(map.mesh.vbo_vertex_count*(3+3))*sizeof(float);
-	
-	glClientActiveTexture(GL_TEXTURE0);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)offset);
-}
-
-void view_compile_gl_list_attach_uv_glow(void)
-{
-	int			offset;
-
-	offset=(map.mesh.vbo_vertex_count*(3+3))*sizeof(float);
-	
-	glClientActiveTexture(GL_TEXTURE1);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)offset);
-	
-	glClientActiveTexture(GL_TEXTURE0);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)offset);
-}
-
-void view_compile_gl_list_enable_color(void)
-{
-	int			offset;
-
-	offset=(map.mesh.vbo_vertex_count*3)*sizeof(float);
-
-	glEnableClientState(GL_COLOR_ARRAY);
-	glColorPointer(3,GL_FLOAT,0,(void*)offset);
-}
-
-void view_compile_gl_list_disable_color(void)
-{
-	glDisableClientState(GL_COLOR_ARRAY);
-}
-
-void view_compile_gl_list_dettach(void)
-{
-	glClientActiveTexture(GL_TEXTURE1);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-
-	glClientActiveTexture(GL_TEXTURE0);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-
-	glDisableClientState(GL_VERTEX_ARRAY);
-
-	view_unbind_map_index_object();
-	view_unbind_map_vertex_object();
-}

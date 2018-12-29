@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,7 +29,11 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "xmls.h"
+#include "interface.h"
+
+extern iface_type			iface;
+extern network_setup_type	net_setup;
+extern file_path_setup_type	file_path_setup;
 
 setup_type					setup;
 
@@ -41,20 +45,19 @@ setup_type					setup;
 
 void setup_xml_default(void)
 {
-	setup.screen_wid=640;
-	setup.screen_high=480;
-	setup.lock_fps_refresh=FALSE;
+	setup.screen_wid=-1;
+	setup.screen_high=-1;
+
+	setup.screen_rtl_wid=320;
+	setup.screen_rtl_high=200;
+	setup.screen_rtl_full_window=TRUE;
 	
-	setup.anisotropic_mode=anisotropic_mode_none;
-	setup.mipmap_mode=mipmap_mode_trilinear;
-	setup.texture_compression=FALSE;
 	setup.fsaa_mode=fsaa_mode_none;
 	
 	setup.decal_on=TRUE;
 	setup.shadow_on=TRUE;
 	
 	setup.gamma=0.0f;
-	setup.tint_color_idx=0;
 	
 	setup.sound_volume=0.6f;
 	setup.music_on=TRUE;
@@ -64,70 +67,41 @@ void setup_xml_default(void)
 	setup.toggle_run=FALSE;
 	setup.invert_look=FALSE;
 	setup.mouse_smooth=TRUE;
+	setup.auto_aim=FALSE;
 
-	setup.mouse_x.speed=0.03f;
-	setup.mouse_x.speed_min=0.0f;
-	setup.mouse_x.speed_max=0.1f;
-	setup.mouse_x.acceleration=0.6f;
-	setup.mouse_x.acceleration_min=0.0f;
-	setup.mouse_x.acceleration_max=1.0f;
+	setup.mouse.speed=0.03f;
+	setup.mouse.acceleration=0.6f;
 
-	setup.mouse_y.speed=0.03f;
-	setup.mouse_y.speed_min=0.0f;
-	setup.mouse_y.speed_max=0.1f;
-	setup.mouse_y.acceleration=0.6f;
-	setup.mouse_y.acceleration_min=0.0f;
-	setup.mouse_y.acceleration_max=1.0f;
-
-	setup.joystick_x.speed=0.03f;
-	setup.joystick_x.speed_min=0.0f;
-	setup.joystick_x.speed_max=0.1f;
-	setup.joystick_x.acceleration=0.6f;
-	setup.joystick_x.acceleration_min=0.0f;
-	setup.joystick_x.acceleration_max=1.0f;
-
-	setup.joystick_y.speed=0.03f;
-	setup.joystick_y.speed_min=0.0f;
-	setup.joystick_y.speed_max=0.1f;
-	setup.joystick_y.acceleration=0.6f;
-	setup.joystick_y.acceleration_min=0.0f;
-	setup.joystick_y.acceleration_max=1.0f;
-
-	setup.joystick_mode=joystick_mode_not_used;
+	setup.joystick.speed=0.03f;
+	setup.joystick.acceleration=0.6f;
 
 	setup.action_list.naction=0;
 
 	strcpy(setup.network.name,"Player");
+	setup.network.character_idx=0;
+	setup.network.tint_color_idx=0;
+	setup.network.custom_host_ip[0]=0x0;
 	setup.network.show_names=TRUE;
-	setup.network.nhost=0;
-	setup.network.noption=0;
-
-	setup.network.last_map[0]=0x0;
+	setup.network.map_rotation=FALSE;
 	
 	setup.network.bot.count=0;
 	setup.network.bot.skill=2;
+	
+	setup.network.map_list.count=0;
+	setup.network.option_list.count=0;
 
 	setup.network.game_type=0;
-	setup.network.last_map[0]=0x0;
 	setup.network.score_limit=20;
+	setup.network.game_reset_secs=15;
+	setup.network.respawn_secs=5;
 	
-	setup.debug_console=FALSE;
 	setup.window=FALSE;
 	setup.window_editor=TRUE;
-}
-
-/* =======================================================
-
-      Setup Value Fixes
-      
-======================================================= */
-
-void setup_xml_fix_axis(setup_axis_type *axis)
-{
-	if (axis->speed<axis->speed_min) axis->speed=axis->speed_min;
-	if (axis->speed>axis->speed_max) axis->speed=axis->speed_max;
-	if (axis->acceleration<axis->acceleration_min) axis->acceleration=axis->acceleration_min;
-	if (axis->acceleration>axis->acceleration_max) axis->acceleration=axis->acceleration_max;
+	setup.no_hud=FALSE;
+	setup.no_draw_weapon=FALSE;
+	setup.metrics_on=FALSE;
+	setup.debug_on=FALSE;
+	setup.ignore_fps_lock=FALSE;
 }
 
 /* =======================================================
@@ -138,12 +112,10 @@ void setup_xml_fix_axis(setup_axis_type *axis)
 
 bool setup_xml_read_path(char *path)
 {
-	int							n,k,naction,nhost,noption,
-								setup_tag,actions_tag,hosts_tag,options_tag,tag;
+	int							n,k,naction,
+								setup_tag,actions_tag,maps_tag,options_tag,tag;
 	char						tag_name[32];
 	setup_action_type			*action;
-	setup_network_hosts_type	*host;
-	setup_network_option_type	*option;
 	
 		// read file
 		
@@ -161,14 +133,9 @@ bool setup_xml_read_path(char *path)
 	
 		// keys
 
-    xml_key_read_int(setup_tag,"Screen_Width",&setup.screen_wid);
-    xml_key_read_int(setup_tag,"Screen_Height",&setup.screen_high);
-	xml_key_read_boolean(setup_tag,"Lock_FPS_Refresh",&setup.lock_fps_refresh);
+	xml_key_read_int(setup_tag,"Screen_Width",&setup.screen_wid);
+	xml_key_read_int(setup_tag,"Screen_Height",&setup.screen_high);
 	xml_key_read_float(setup_tag,"Gamma",&setup.gamma);
-    xml_key_read_int(setup_tag,"Tint",&setup.tint_color_idx);
-    xml_key_read_boolean(setup_tag,"Texture_Compression",&setup.texture_compression);
-    xml_key_read_int(setup_tag,"Anisotropic_Mode",&setup.anisotropic_mode);
-    xml_key_read_int(setup_tag,"Mipmap_Mode",&setup.mipmap_mode);
 	xml_key_read_int(setup_tag,"FSAA_Mode",&setup.fsaa_mode);
 	xml_key_read_boolean(setup_tag,"Decal_On",&setup.decal_on);
 	xml_key_read_boolean(setup_tag,"Shadow_On",&setup.shadow_on);
@@ -178,48 +145,35 @@ bool setup_xml_read_path(char *path)
 	xml_key_read_boolean(setup_tag,"Always_Run",&setup.always_run);
 	xml_key_read_boolean(setup_tag,"Toggle_Run",&setup.toggle_run);
 	xml_key_read_boolean(setup_tag,"Invert_Look",&setup.invert_look);
+	xml_key_read_boolean(setup_tag,"Auto_Aim",&setup.auto_aim);
 	xml_key_read_boolean(setup_tag,"Mouse_Smooth",&setup.mouse_smooth);
-	xml_key_read_float(setup_tag,"Mouse_X_Speed",&setup.mouse_x.speed);
-	xml_key_read_float(setup_tag,"Mouse_X_Speed_Min",&setup.mouse_x.speed_min);
-	xml_key_read_float(setup_tag,"Mouse_X_Speed_Max",&setup.mouse_x.speed_max);
-	xml_key_read_float(setup_tag,"Mouse_X_Acceleration",&setup.mouse_x.acceleration);
-	xml_key_read_float(setup_tag,"Mouse_X_Acceleration_Min",&setup.mouse_x.acceleration_min);
-	xml_key_read_float(setup_tag,"Mouse_X_Acceleration_Max",&setup.mouse_x.acceleration_max);
-	xml_key_read_float(setup_tag,"Mouse_Y_Speed",&setup.mouse_y.speed);
-	xml_key_read_float(setup_tag,"Mouse_Y_Speed_Min",&setup.mouse_y.speed_min);
-	xml_key_read_float(setup_tag,"Mouse_Y_Speed_Max",&setup.mouse_y.speed_max);
-	xml_key_read_float(setup_tag,"Mouse_Y_Acceleration",&setup.mouse_y.acceleration);
-	xml_key_read_float(setup_tag,"Mouse_Y_Acceleration_Min",&setup.mouse_y.acceleration_min);
-	xml_key_read_float(setup_tag,"Mouse_Y_Acceleration_Max",&setup.mouse_y.acceleration_max);
-	xml_key_read_float(setup_tag,"Joystick_X_Speed",&setup.joystick_x.speed);
-	xml_key_read_float(setup_tag,"Joystick_X_Speed_Min",&setup.joystick_x.speed_min);
-	xml_key_read_float(setup_tag,"Joystick_X_Speed_Max",&setup.joystick_x.speed_max);
-	xml_key_read_float(setup_tag,"Joystick_X_Acceleration",&setup.joystick_x.acceleration);
-	xml_key_read_float(setup_tag,"Joystick_X_Acceleration_Min",&setup.joystick_x.acceleration_min);
-	xml_key_read_float(setup_tag,"Joystick_X_Acceleration_Max",&setup.joystick_x.acceleration_max);
-	xml_key_read_float(setup_tag,"Joystick_Y_Speed",&setup.joystick_y.speed);
-	xml_key_read_float(setup_tag,"Joystick_Y_Speed_Min",&setup.joystick_y.speed_min);
-	xml_key_read_float(setup_tag,"Joystick_Y_Speed_Max",&setup.joystick_y.speed_max);
-	xml_key_read_float(setup_tag,"Joystick_Y_Acceleration",&setup.joystick_y.acceleration);
-	xml_key_read_float(setup_tag,"Joystick_Y_Acceleration_Min",&setup.joystick_y.acceleration_min);
-	xml_key_read_float(setup_tag,"Joystick_Y_Acceleration_Max",&setup.joystick_y.acceleration_max);
-	xml_key_read_int(setup_tag,"Joystick_Mode",&setup.joystick_mode);
+	xml_key_read_float(setup_tag,"Mouse_Speed",&setup.mouse.speed);
+	xml_key_read_float(setup_tag,"Mouse_Acceleration",&setup.mouse.acceleration);
+	xml_key_read_float(setup_tag,"Joystick_Speed",&setup.joystick.speed);
+	xml_key_read_float(setup_tag,"Joystick_Acceleration",&setup.joystick.acceleration);
 	xml_key_read_text(setup_tag,"Network_Name",setup.network.name,name_str_len);
-	xml_key_read_text(setup_tag,"Network_Last_Map",setup.network.last_map,name_str_len);
+    xml_key_read_int(setup_tag,"Character",&setup.network.character_idx);
+    xml_key_read_int(setup_tag,"Tint",&setup.network.tint_color_idx);
+	xml_key_read_text(setup_tag,"Network_Custom_Host_IP",setup.network.custom_host_ip,64);
 	xml_key_read_int(setup_tag,"Host_Bot_Count",&setup.network.bot.count);
 	xml_key_read_int(setup_tag,"Host_Bot_Skill",&setup.network.bot.skill);
 	xml_key_read_int(setup_tag,"Host_Game_Type",&setup.network.game_type);
 	xml_key_read_int(setup_tag,"Host_Score_Limit",&setup.network.score_limit);
+	xml_key_read_int(setup_tag,"Host_Game_Reset_Secs",&setup.network.game_reset_secs);
+	xml_key_read_int(setup_tag,"Host_Respawn_Secs",&setup.network.respawn_secs);
 	xml_key_read_boolean(setup_tag,"Network_Show_Names",&setup.network.show_names);
-	xml_key_read_boolean(setup_tag,"Debug_Console",&setup.debug_console);
+	xml_key_read_boolean(setup_tag,"Network_Map_Rotation",&setup.network.map_rotation);
 	xml_key_read_boolean(setup_tag,"Window",&setup.window);
 	xml_key_read_boolean(setup_tag,"Window_Editor",&setup.window_editor);
+	xml_key_read_boolean(setup_tag,"No_HUD",&setup.no_hud);
+	xml_key_read_boolean(setup_tag,"No_Draw_Weapon",&setup.no_draw_weapon);
+	xml_key_read_boolean(setup_tag,"Metrics_On",&setup.metrics_on);
+	xml_key_read_boolean(setup_tag,"Debug_On",&setup.debug_on);
+	xml_key_read_boolean(setup_tag,"Ignore_FPS_Lock",&setup.ignore_fps_lock);
+	xml_key_read_int(setup_tag,"Screen_dim3RTL_Width",&setup.screen_rtl_wid);
+	xml_key_read_int(setup_tag,"Screen_dim3RTL_Height",&setup.screen_rtl_high);
+	xml_key_read_boolean(setup_tag,"Screen_dim3RTL_Full_Window",&setup.screen_rtl_full_window);
 
-		// fix some items
-
-	setup_xml_fix_axis(&setup.mouse_x);
-	setup_xml_fix_axis(&setup.mouse_y);
-	
 		// actions
 
     actions_tag=xml_findfirstchild("Actions",setup_tag);
@@ -236,7 +190,7 @@ bool setup_xml_read_path(char *path)
 			
 			for (k=0;k!=max_setup_action_attach;k++) {
 				sprintf(tag_name,"attach_%d",k);
-				if (!xml_get_attribute_text(tag,tag_name,action->attach[k],32)) action->attach[k][0]=0x0;
+				xml_get_attribute_text(tag,tag_name,action->attach[k],32);
 			}
            
 			tag=xml_findnextchild(tag);
@@ -245,42 +199,32 @@ bool setup_xml_read_path(char *path)
         }
 	}
 
-		// hosts
-
-    hosts_tag=xml_findfirstchild("Hosts",setup_tag);
-    if (hosts_tag!=-1) {
+ 		// maps
+		
+    maps_tag=xml_findfirstchild("Maps",setup_tag);
+    if (maps_tag!=-1) {
 	
-		nhost=xml_countchildren(hosts_tag);
-		tag=xml_findfirstchild("Host",hosts_tag);
+		setup.network.map_list.count=xml_countchildren(maps_tag);
+		tag=xml_findfirstchild("Map",maps_tag);
 		
-		setup.network.nhost=nhost;
-		host=setup.network.hosts;
-		
-        for (n=0;n!=nhost;n++) {
-			xml_get_attribute_text(tag,"ip",host->ip,256);
-
+        for (n=0;n!=setup.network.map_list.count;n++) {
+			xml_get_attribute_text(tag,"name",setup.network.map_list.maps[n].name,name_str_len);
 			tag=xml_findnextchild(tag);
-			host++;
-        }
+ 		}
 	}
 	
  		// options
-
+		
     options_tag=xml_findfirstchild("Options",setup_tag);
     if (options_tag!=-1) {
 	
-		noption=xml_countchildren(options_tag);
+		setup.network.option_list.count=xml_countchildren(options_tag);
 		tag=xml_findfirstchild("Option",options_tag);
-
-		setup.network.noption=noption;
-		option=setup.network.options;
 		
-        for (n=0;n!=noption;n++) {
-			xml_get_attribute_text(tag,"name",option->name,name_str_len);
-			
+        for (n=0;n!=setup.network.option_list.count;n++) {
+			xml_get_attribute_text(tag,"name",setup.network.option_list.options[n].name,name_str_len);
 			tag=xml_findnextchild(tag);
-  			option++;
-		}
+ 		}
 	}
   
 	xml_close_file();
@@ -295,11 +239,13 @@ bool setup_xml_read(void)
 		// check user specific setup XML file.  If it exists, use that,
 		// otherwise use default XML file
 		
-	if (!file_paths_documents_exist(&setup.file_path_setup,path,"Settings","Setup","xml")) {
-		file_paths_data(&setup.file_path_setup,path,"Settings","Setup","xml");
+	if (!file_paths_app_data_exist(&file_path_setup,path,"Settings","Setup","xml")) {
+		file_paths_data(&file_path_setup,path,"Settings","Setup","xml");
 	}
+	
+	if (!setup_xml_read_path(path)) return(FALSE);
 
-	return(setup_xml_read_path(path));
+	return(TRUE);
 }
 
 bool setup_xml_reset(void)
@@ -308,7 +254,7 @@ bool setup_xml_reset(void)
 	
 		// read directly from the default
 		
-	file_paths_data(&setup.file_path_setup,path,"Settings","Setup","xml");
+	file_paths_data(&file_path_setup,path,"Settings","Setup","xml");
 
 	return(setup_xml_read_path(path));
 }
@@ -322,11 +268,9 @@ bool setup_xml_reset(void)
 bool setup_xml_write(void)
 {
 	int							n,k;
-	char						path[1024],tag_name[32];
+	char						path[1024],tag_name[32],err_str[256];
 	bool						ok;
 	setup_action_type			*action;
-	setup_network_hosts_type	*host;
-	setup_network_option_type	*option;
 	
 		// start the setup file
 		
@@ -339,12 +283,7 @@ bool setup_xml_write(void)
 
     xml_key_write_int("Screen_Width",setup.screen_wid);
     xml_key_write_int("Screen_Height",setup.screen_high);
-    xml_key_write_boolean("Lock_FPS_Refresh",setup.lock_fps_refresh);
 	xml_key_write_float("Gamma",setup.gamma);
-	xml_key_write_int("Tint",setup.tint_color_idx);
-	xml_key_write_boolean("Texture_Compression",setup.texture_compression);
-	xml_key_write_int("Anisotropic_Mode",setup.anisotropic_mode);
-    xml_key_write_int("Mipmap_Mode",setup.mipmap_mode);
 	xml_key_write_int("FSAA_Mode",setup.fsaa_mode);
 	xml_key_write_boolean("Decal_On",setup.decal_on);
 	xml_key_write_boolean("Shadow_On",setup.shadow_on);
@@ -354,43 +293,35 @@ bool setup_xml_write(void)
 	xml_key_write_boolean("Always_Run",setup.always_run);
 	xml_key_write_boolean("Toggle_Run",setup.toggle_run);
 	xml_key_write_boolean("Invert_Look",setup.invert_look);
+	xml_key_write_boolean("Auto_Aim",setup.auto_aim);
 	xml_key_write_boolean("Mouse_Smooth",setup.mouse_smooth);
-	xml_key_write_float("Mouse_X_Speed",setup.mouse_x.speed);
-	xml_key_write_float("Mouse_X_Speed_Min",setup.mouse_x.speed_min);
-	xml_key_write_float("Mouse_X_Speed_Max",setup.mouse_x.speed_max);
-	xml_key_write_float("Mouse_X_Acceleration",setup.mouse_x.acceleration);
-	xml_key_write_float("Mouse_X_Acceleration_Min",setup.mouse_x.acceleration_min);
-	xml_key_write_float("Mouse_X_Acceleration_Max",setup.mouse_x.acceleration_max);
-	xml_key_write_float("Mouse_Y_Speed",setup.mouse_y.speed);
-	xml_key_write_float("Mouse_Y_Speed_Min",setup.mouse_y.speed_min);
-	xml_key_write_float("Mouse_Y_Speed_Max",setup.mouse_y.speed_max);
-	xml_key_write_float("Mouse_Y_Acceleration",setup.mouse_y.acceleration);
-	xml_key_write_float("Mouse_Y_Acceleration_Min",setup.mouse_y.acceleration_min);
-	xml_key_write_float("Mouse_Y_Acceleration_Max",setup.mouse_y.acceleration_max);
-	xml_key_write_float("Joystick_X_Speed",setup.joystick_x.speed);
-	xml_key_write_float("Joystick_X_Speed_Min",setup.joystick_x.speed_min);
-	xml_key_write_float("Joystick_X_Speed_Max",setup.joystick_x.speed_max);
-	xml_key_write_float("Joystick_X_Acceleration",setup.joystick_x.acceleration);
-	xml_key_write_float("Joystick_X_Acceleration_Min",setup.joystick_x.acceleration_min);
-	xml_key_write_float("Joystick_X_Acceleration_Max",setup.joystick_x.acceleration_max);
-	xml_key_write_float("Joystick_Y_Speed",setup.joystick_y.speed);
-	xml_key_write_float("Joystick_Y_Speed_Min",setup.joystick_y.speed_min);
-	xml_key_write_float("Joystick_Y_Speed_Max",setup.joystick_y.speed_max);
-	xml_key_write_float("Joystick_Y_Acceleration",setup.joystick_y.acceleration);
-	xml_key_write_float("Joystick_Y_Acceleration_Min",setup.joystick_y.acceleration_min);
-	xml_key_write_float("Joystick_Y_Acceleration_Max",setup.joystick_y.acceleration_max);
-	xml_key_write_int("Joystick_Mode",setup.joystick_mode);
+	xml_key_write_float("Mouse_Speed",setup.mouse.speed);
+	xml_key_write_float("Mouse_Acceleration",setup.mouse.acceleration);
+	xml_key_write_float("Joystick_Speed",setup.joystick.speed);
+	xml_key_write_float("Joystick_Acceleration",setup.joystick.acceleration);
 	xml_key_write_text("Network_Name",setup.network.name);
-	xml_key_write_text("Network_Last_Map",setup.network.last_map);
+	xml_key_write_int("Character",setup.network.character_idx);
+	xml_key_write_int("Tint",setup.network.tint_color_idx);
+	xml_key_write_text("Network_Custom_Host_IP",setup.network.custom_host_ip);
 	xml_key_write_int("Host_Bot_Count",setup.network.bot.count);
 	xml_key_write_int("Host_Bot_Skill",setup.network.bot.skill);
 	xml_key_write_int("Host_Game_Type",setup.network.game_type);
 	xml_key_write_int("Host_Score_Limit",setup.network.score_limit);
+	xml_key_write_int("Host_Game_Reset_Secs",setup.network.game_reset_secs);
+	xml_key_write_int("Host_Respawn_Secs",setup.network.respawn_secs);
 	xml_key_write_boolean("Network_Show_Names",setup.network.show_names);
-	xml_key_write_boolean("Debug_Console",setup.debug_console);
+	xml_key_write_boolean("Network_Map_Rotation",setup.network.map_rotation);
 	xml_key_write_boolean("Window",setup.window);
 	xml_key_write_boolean("Window_Editor",setup.window_editor);
-	
+	xml_key_write_boolean("No_HUD",setup.no_hud);
+	xml_key_write_boolean("No_Draw_Weapon",setup.no_draw_weapon);
+	xml_key_write_boolean("Metrics_On",setup.metrics_on);
+	xml_key_write_boolean("Debug_On",setup.debug_on);
+	xml_key_write_boolean("Ignore_FPS_Lock",setup.ignore_fps_lock);
+    xml_key_write_int("Screen_dim3RTL_Width",setup.screen_rtl_wid);
+    xml_key_write_int("Screen_dim3RTL_Height",setup.screen_rtl_high);
+	xml_key_write_boolean("Screen_dim3RTL_Full_Window",setup.screen_rtl_full_window);
+
 		// actions
 
     xml_add_tagstart("Actions");
@@ -415,34 +346,28 @@ bool setup_xml_write(void)
 
     xml_add_tagclose("Actions");
 	
-		// hosts
-
-    xml_add_tagstart("Hosts");
+		// maps
+		
+    xml_add_tagstart("Maps");
     xml_add_tagend(FALSE);
 	
-	host=setup.network.hosts;
-		
-	for (n=0;n!=setup.network.nhost;n++) {
-		xml_add_tagstart("Host");
-		xml_add_attribute_text("ip",host->ip);
-	    xml_add_tagend(TRUE);
-		host++;
+	for (n=0;n!=setup.network.map_list.count;n++) {
+		xml_add_tagstart("Map");
+		xml_add_attribute_text("name",setup.network.map_list.maps[n].name);
+		xml_add_tagend(TRUE);
 	}
 
-    xml_add_tagclose("Hosts");
+    xml_add_tagclose("Maps");
 	
 		// options
 		
     xml_add_tagstart("Options");
     xml_add_tagend(FALSE);
 	
-	option=setup.network.options;
-		
-	for (n=0;n!=setup.network.noption;n++) {
+	for (n=0;n!=setup.network.option_list.count;n++) {
 		xml_add_tagstart("Option");
-		xml_add_attribute_text("name",option->name);
-	    xml_add_tagend(TRUE);
-		option++;
+		xml_add_attribute_text("name",setup.network.option_list.options[n].name);
+		xml_add_tagend(TRUE);
 	}
 
     xml_add_tagclose("Options");
@@ -454,9 +379,9 @@ bool setup_xml_write(void)
         // save the setup
 		// always save to user specific data
 		
-	file_paths_documents(&setup.file_path_setup,path,"Settings","Setup","xml");
+	file_paths_app_data(&file_path_setup,path,"Settings","Setup","xml");
 		
-	ok=xml_save_file(path);
+	ok=xml_save_file(path,err_str);
     xml_close_file();
 	
 	return(ok);
@@ -473,23 +398,23 @@ void setup_restore(void)
 		// reset important defaults
 		// to their simpliest form
 		
-	setup.screen_wid=640;
-	setup.screen_high=480;
-	setup.lock_fps_refresh=FALSE;
+	setup.screen_wid=-1;
+	setup.screen_high=-1;
 	
 	setup.decal_on=FALSE;
 	setup.shadow_on=FALSE;
 	
-	setup.anisotropic_mode=anisotropic_mode_none;
-	setup.mipmap_mode=mipmap_mode_none;
-	setup.texture_compression=FALSE;
 	setup.fsaa_mode=fsaa_mode_none;
 	
 	setup.music_on=FALSE;
 
-	setup.debug_console=TRUE;
 	setup.window=FALSE;
 	setup.window_editor=TRUE;
+	setup.no_hud=FALSE;
+	setup.no_draw_weapon=FALSE;
+	setup.metrics_on=FALSE;
+	setup.debug_on=FALSE;
+	setup.ignore_fps_lock=FALSE;
 	
 		// save XML
 		

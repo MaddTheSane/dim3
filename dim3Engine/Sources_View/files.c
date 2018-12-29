@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,33 +29,30 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "interfaces.h"
-#include "video.h"
-#include "inputs.h"
+#include "interface.h"
 
 #define max_file_count					256
 
-#define file_button_save_id				0
-#define file_button_load_id				1
-#define file_button_delete_id			2
-#define file_button_cancel_id			3
-#define file_directory_id				4
+#define file_frame_id					0
+#define file_info_table_id				1
+#define file_info_bitmap_id				2
+#define file_info_name_id				3
+#define file_info_time_id				4
+#define file_info_elapsed_id			5
 
-extern bool game_file_save(char *err_str);
-extern bool game_file_quick_save(char *err_str);
-extern bool game_file_load(char *file_name,char *err_str);
-extern void console_add_error(char *txt);
-extern void intro_open(void);
-extern void map_end(void);
-extern void game_end(void);
-extern void game_time_pause_end(void);
+#define file_button_save_id				10
+#define file_button_load_id				11
+#define file_button_delete_id			12
+#define file_button_cancel_id			13
 
-extern server_type			server;
-extern hud_type				hud;
-extern setup_type			setup;
+extern server_type				server;
+extern iface_type				iface;
+extern setup_type				setup;
+extern file_path_setup_type		file_path_setup;
 
-char						*file_table_data,*file_name_data;
-bool						file_start_trigger;
+int								file_last_state;
+char							*file_table_data;
+bool							file_is_save,file_has_list;
 			
 /* =======================================================
 
@@ -109,10 +106,10 @@ void file_dir_name_to_time(char *dir_name,char *time_str)
 	time_str[16]=0x0;
 	
 	if (am) {
-		strcat(time_str," am");
+		strcat(time_str," AM");
 	}
 	else {
-		strcat(time_str," pm");
+		strcat(time_str," PM");
 	}
 }
 
@@ -132,49 +129,70 @@ void file_dir_name_to_elapsed(char *dir_name,char *elapse_str)
 
 void file_build_list(void)
 {
-	int							n,sz;
-	char						*c,name_str[64],time_str[64],elapse_str[64];
+	int							n,k,idx,cnt,sz,sort_idx[max_file_count+1];
+	char						name_str[64];
 	file_path_directory_type	*fpd;
 	
 		// data for maximum number of files
 		
-	sz=max_file_count*128;
+	sz=(max_file_count+1)*128;
 	
 	file_table_data=malloc(sz);
 	bzero(file_table_data,sz);
 	
-	file_name_data=malloc(sz);
-	bzero(file_name_data,sz);
-	
 		// grab the files
 		
-	fpd=file_paths_read_directory_document(&setup.file_path_setup,"Saved Games","sav");
+	fpd=file_paths_read_directory_document(&file_path_setup,"Saved Games","sav");
 	if (fpd==NULL) return;
+
+		// sort the times
+
+	cnt=0;
 	
 	for (n=0;n!=fpd->nfile;n++) {
 	
-			// save name
+		if (fpd->files[n].is_dir) continue;
+
+			// find position in sort
+
+		idx=cnt;
+
+		for (k=0;k!=cnt;k++) {
+			if (strcmp(fpd->files[n].file_name,fpd->files[sort_idx[k]].file_name)>0) {
+				idx=k;
+				break;
+			}
+		}
+
+		if (idx==cnt) {
+			sort_idx[cnt]=n;
+		}
+		else {
+			sz=cnt-idx;
+			if (sz!=0) memmove(&sort_idx[idx+1],&sort_idx[idx],(sizeof(int)*sz));
+			sort_idx[idx]=n;
+		}
+
+		cnt++;
+	}
+
+		// fill in the list
+
+	for (n=0;n!=cnt;n++) {
+		idx=sort_idx[n];
 			
-		c=file_name_data+(128*n);
-		strcpy(c,fpd->files[n].file_name);
-		
-			// table data
-			
-		file_dir_name_to_name(fpd->files[n].file_name,name_str);
-		file_dir_name_to_time(fpd->files[n].file_name,time_str);
-		file_dir_name_to_elapsed(fpd->files[n].file_name,elapse_str);
-		
-		c=file_table_data+(128*n);
-		sprintf(c,"Saved Games;%s;%s\t%s\t%s",fpd->files[n].file_name,name_str,time_str,elapse_str);
+		file_dir_name_to_name(fpd->files[idx].file_name,name_str);
+		sprintf((file_table_data+(128*n)),"%s\t%s",name_str,fpd->files[idx].file_name);
 	}
 
 	file_paths_close_directory(fpd);
+
+	file_has_list=(cnt!=0);
 }
 
 void file_close_list(void)
 {
 	free(file_table_data);
-	free(file_name_data);
 }
 
 /* =======================================================
@@ -186,33 +204,55 @@ void file_close_list(void)
 void file_save_selected(void)
 {
 	int				idx;
+	char			file_name[256],str[256],path[1024];
 	
-	idx=element_get_value(file_directory_id);
+	idx=element_get_value(file_info_table_id);
 	
 		// nothing selected
 		
 	if (idx==-1) {
 
-		if (server.map_open) {
-			element_hide(file_button_save_id,FALSE);
-			element_hide(file_button_load_id,TRUE);
-		}
-		else {
-			element_hide(file_button_save_id,TRUE);
-			element_hide(file_button_load_id,FALSE);
+			// buttons
+
+		if (!file_is_save) {
+			element_enable(file_button_load_id,FALSE);
 			element_enable(file_button_load_id,FALSE);
 		}
 
 		element_enable(file_button_delete_id,FALSE);
+
+			// info
+		
+		element_set_bitmap(file_info_bitmap_id,NULL);
+		element_text_change(file_info_name_id,"");
+		element_text_change(file_info_time_id,"");
+		element_text_change(file_info_elapsed_id,"");
 		return;
 	}
 	
 		// save game selected
 
-	element_hide(file_button_save_id,TRUE);
-	element_hide(file_button_load_id,FALSE);
-	element_enable(file_button_load_id,TRUE);
+	if (!file_is_save) element_enable(file_button_load_id,TRUE);
 	element_enable(file_button_delete_id,TRUE);
+
+		// info
+
+	element_get_table_column_data(file_info_table_id,idx,1,file_name,256);
+
+	file_paths_app_data(&file_path_setup,path,"Saved Games",NULL,NULL);
+	strcat(path,"/");
+	strcat(path,file_name);
+	strcat(path,".png");
+	element_set_bitmap(file_info_bitmap_id,path);
+
+	file_dir_name_to_name(file_name,str);
+	element_text_change(file_info_name_id,str);
+
+	file_dir_name_to_time(file_name,str);
+	element_text_change(file_info_time_id,str);
+
+	file_dir_name_to_elapsed(file_name,str);
+	element_text_change(file_info_elapsed_id,str);
 }
 
 /* =======================================================
@@ -224,22 +264,22 @@ void file_save_selected(void)
 void file_save_delete(void)
 {
 	int				idx;
-	char			*c,file_name[128],path[1024];
+	char			*c,file_name[256],path[1024];
 	
-	idx=element_get_value(file_directory_id);
+	idx=element_get_value(file_info_table_id);
 	if (idx==-1) return;
 	
 		// delete save game and png
 		
-	strcpy(file_name,(char*)(file_name_data+(128*idx)));
+	element_get_table_column_data(file_info_table_id,idx,1,file_name,256);
 	
 	c=strrchr(file_name,'.');		// get rid of .sav
 	if (c!=NULL) *c=0x0;
 	
-	file_paths_documents(&setup.file_path_setup,path,"Saved Games",file_name,"png");
+	file_paths_app_data(&file_path_setup,path,"Saved Games",file_name,"png");
 	remove(path);
 	
-	file_paths_documents(&setup.file_path_setup,path,"Saved Games",file_name,"sav");
+	file_paths_app_data(&file_path_setup,path,"Saved Games",file_name,"sav");
 	remove(path);
 	
 		// reset table
@@ -247,9 +287,9 @@ void file_save_delete(void)
 	file_close_list();
 	file_build_list();
 	
-	element_set_table_data(file_directory_id,file_table_data);
+	element_set_table_data(file_info_table_id,FALSE,file_table_data);
 	
-	element_set_value(file_directory_id,-1);
+	element_set_value(file_info_table_id,-1);
 	file_save_selected();
 }
 
@@ -261,70 +301,79 @@ void file_save_delete(void)
 
 void file_open(void)
 {
-	int					x,y,wid,high,padding;
+	int							x,y,fx,fy,ty,wid,high,mx,tx,half_wid,pic_high,
+								table_high,margin,padding;
+	element_frame_button_type	butts_save[3]={{file_button_delete_id,"Delete",FALSE},{file_button_cancel_id,"Cancel",TRUE},{file_button_save_id,"New Save",TRUE}},
+								butts_load[3]={{file_button_delete_id,"Delete",FALSE},{file_button_cancel_id,"Cancel",TRUE},{file_button_load_id,"Load",TRUE}};
 	element_column_type	cols[4];
+	
+	file_last_state=server.last_state;
 	
 		// setup gui
 		
-	gui_initialize("Bitmaps/Backgrounds","setup",FALSE);
+	gui_initialize("Bitmaps/Backgrounds","main");
 	
-		// title
-		
-	x=(int)(((float)hud.scale_x)*0.03f);
-	y=(int)(((float)hud.scale_y)*0.09f);
+		// the frame
 
-	element_text_add("Load Saved Game",-1,x,y,hud.font.text_size_large,tx_left,FALSE,FALSE);
+	margin=element_get_margin();
+	padding=element_get_padding();
+
+	fx=margin;
+	fy=margin;
+	wid=iface.scale_x-(margin*2);
+	high=iface.scale_y-(margin*2);
+	
+	if (file_is_save) {
+		element_frame_add("Save Game",file_frame_id,fx,fy,wid,high,-1,0,NULL,3,butts_save);
+	}
+	else {
+		element_frame_add("Load Game",file_frame_id,fx,fy,wid,high,-1,0,NULL,3,butts_load);
+	}
+
+	element_get_frame_inner_space(file_frame_id,&x,&y,&wid,&table_high);
+
+	half_wid=(wid>>1)-padding;
+	mx=((x+wid)-half_wid)-padding;
 	
 		// make the file list
 		
 	file_build_list();
-	
+
+		// info
+
+	pic_high=(half_wid*3)/4;
+	ty=y+((table_high-(pic_high+margin+iface.font.text_size_medium+(element_get_control_high()*2)))>>1);
+
+	element_bitmap_add(NULL,file_info_bitmap_id,x,ty,half_wid,pic_high,TRUE);
+
+	tx=x+(half_wid>>2);
+	ty+=(pic_high+margin+iface.font.text_size_medium);
+
+	element_text_add("Map:",-1,tx,ty,iface.font.text_size_medium,tx_right,&iface.color.control.text,FALSE);
+	element_text_add("",file_info_name_id,(tx+10),ty,iface.font.text_size_medium,tx_left,&iface.color.control.text,FALSE);
+
+	ty+=element_get_control_high();
+	element_text_add("Time:",-1,tx,ty,iface.font.text_size_medium,tx_right,&iface.color.control.text,FALSE);
+	element_text_add("",file_info_time_id,(tx+10),ty,iface.font.text_size_medium,tx_left,&iface.color.control.text,FALSE);
+
+	ty+=element_get_control_high();
+	element_text_add("Elapsed:",-1,tx,ty,iface.font.text_size_medium,tx_right,&iface.color.control.text,FALSE);
+	element_text_add("",file_info_elapsed_id,(tx+10),ty,iface.font.text_size_medium,tx_left,&iface.color.control.text,FALSE);
+
 		// files
-		
-	x=(int)(((float)hud.scale_x)*0.03f);
-	y=(int)(((float)hud.scale_y)*0.12f);
 
-	wid=hud.scale_x-(x*2);
-	high=(int)(((float)hud.scale_y)*0.88f)-y;
+	strcpy(cols[0].name,"Saved Games");
+	cols[0].percent_size=1.0f;
 
-	strcpy(cols[0].name,"Map");
-	cols[0].percent_size=0.50f;
-	strcpy(cols[1].name,"Save Time");
-	cols[1].percent_size=0.32f;
-	strcpy(cols[2].name,"Elapsed Time");
-	cols[2].percent_size=0.18f;
+	element_table_add(cols,file_table_data,file_info_table_id,1,(mx+padding),y,half_wid,table_high,FALSE,element_table_bitmap_none);
 
-	element_table_add(cols,file_table_data,file_directory_id,3,x,y,wid,high,element_table_bitmap_document);
-	
-		// buttons
-		
-	padding=element_get_padding();
-	
-	wid=(int)(((float)hud.scale_x)*0.1f);
-	high=(int)(((float)hud.scale_x)*0.05f);
-	
-	x=hud.scale_x-padding;
-	y=hud.scale_y-padding;
-	
-	element_button_text_add("Save",file_button_save_id,x,y,wid,high,element_pos_right,element_pos_bottom);
-	element_hide(file_button_save_id,!server.map_open);
-	
-	element_button_text_add("Load",file_button_load_id,x,y,wid,high,element_pos_right,element_pos_bottom);
-	element_enable(file_button_load_id,FALSE);
-	element_hide(file_button_load_id,server.map_open);
+		// if a first item, select it
 
-	x=element_get_x_position(file_button_load_id)-padding;
-	
-	element_button_text_add("Delete",file_button_delete_id,x,y,wid,high,element_pos_right,element_pos_bottom);
-	element_enable(file_button_delete_id,FALSE);
-	
-	x=element_get_x_position(file_button_delete_id)-padding;
+	if (file_has_list) element_set_value(file_info_table_id,0);
 
-	element_button_text_add("Cancel",file_button_cancel_id,x,y,wid,high,element_pos_right,element_pos_bottom);
+		// enable buttons
 
-		// in file chooser
-		
-	server.state=gs_file;
+	file_save_selected();
 }
 
 void file_close(void)
@@ -333,30 +382,9 @@ void file_close(void)
 	file_close_list();
 }
 
-void file_return_to_game(void)
+void file_setup(bool is_save)
 {
-	server.state=gs_running;
-}
-
-/* =======================================================
-
-      File Triggers
-      
-======================================================= */
-
-void file_trigger_clear(void)
-{
-	file_start_trigger=FALSE;
-}
-
-void file_trigger_check(void)
-{
-	if (file_start_trigger) file_open();
-}	
-
-void file_trigger_set(void)
-{
-	if (server.state==gs_running) file_start_trigger=TRUE;
+	file_is_save=is_save;
 }
 
 /* =======================================================
@@ -369,12 +397,20 @@ void file_input(void)
 {
 	char		err_str[256];
 	
-	if (input_action_get_state_single(nc_save_load)) {
-		file_open();
+	if (input_action_get_state_single(nc_save)) {
+		file_setup(TRUE);
+		server.next_state=gs_file;
 		return;
 	}
+	
+	if (input_action_get_state_single(nc_load)) {
+		file_setup(FALSE);
+		server.next_state=gs_file;
+		return;
+	}
+	
 	if (input_action_get_state_single(nc_quick_save)) {
-		if (!game_file_save(err_str)) console_add_error(err_str);
+		if (!game_file_save(FALSE,FALSE,err_str)) console_add_error(err_str);
 		return;
 	}
 }
@@ -383,42 +419,51 @@ void file_click(void)
 {
 	int			id,k;
 	char		err_str[256],file_name[256];
-	
-		// is element being clicked
+
+	id=-1;
+
+		// keyboard
+
+	if (input_get_keyboard_escape()) id=file_button_cancel_id;
+	if (input_get_keyboard_return()) id=file_is_save?file_button_save_id:file_button_load_id;
+
+		// clicking
+
+	if (id==-1) {
+		id=gui_click();
+		if (id!=-1) hud_click();
+	}
 		
-	id=gui_click();
 	if (id==-1) return;
-	
-	hud_click();
-	
-		// run selection
+
+		// handle click
 		
 	switch (id) {
 	
 		case file_button_save_id:
-			if (!game_file_save(err_str)) console_add_error(err_str);
-			file_close();
-			file_return_to_game();
+			if (!game_file_save(FALSE,FALSE,err_str)) console_add_error(err_str);
+			server.next_state=gs_running;
 			break;
 			
 		case file_button_load_id:
-			k=element_get_value(file_directory_id);
+
+			k=element_get_value(file_info_table_id);
 			if (k==-1) break;
 			
-			strcpy(file_name,(char*)(file_name_data+(128*k)));
+			element_get_table_column_data(file_info_table_id,k,1,file_name,256);
 
-			file_close();
+			server.next_state=gs_running;
 
-			if (game_file_load(file_name,err_str)) {
+			if (game_file_load(file_name,FALSE,err_str)) {
 				game_time_pause_end();
-				file_return_to_game();
 				break;
 			}
 
 			if (server.map_open) map_end();
 			if (server.game_open) game_end();
 
-			error_open(err_str,"Game Load Canceled");
+			error_setup(err_str,"Game Load Canceled");
+			server.next_state=gs_error;
 			break;
 			
 		case file_button_delete_id:
@@ -426,15 +471,10 @@ void file_click(void)
 			break;
 			
 		case file_button_cancel_id:
-			file_close();
-			if (!server.map_open) {
-				intro_open();
-				return;
-			}
-			file_return_to_game();
+			server.next_state=file_last_state;
 			break;
 			
-		case file_directory_id:
+		case file_info_table_id:
 			file_save_selected();
 			break;
 			

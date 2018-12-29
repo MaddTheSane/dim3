@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,39 +29,46 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "models.h"
-#include "consoles.h"
-#include "lights.h"
-#include "video.h"
+#include "interface.h"
+#include "objects.h"
 
 extern server_type				server;
 extern view_type				view;
 extern map_type					map;
 
-extern int game_time_get(void);
-
 /* =======================================================
 
-      Model Fills
+      Model Texture Animations
       
 ======================================================= */
 
-void model_change_fill(model_draw *draw,int wfill,int txt)
+void model_texture_change_frame(model_draw *draw,int txt_idx,int frame)
 {
-	int					count;
+	int					frame_count;
 	model_type			*mdl;
-	texture_type		*texture;
     
-    if ((wfill<0) || (wfill>=max_model_texture)) return;
+    if ((txt_idx<0) || (txt_idx>=max_model_texture)) return;
     
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return;
+	if (draw->model_idx==-1) return;
+	mdl=server.model_list.models[draw->model_idx];
 	
-	count=model_count_texture_frames(mdl,wfill);
-    texture=&mdl->textures[wfill];
-    if ((txt<0) || (txt>=count)) return;
+	frame_count=model_count_texture_frames(mdl,txt_idx);
+    if ((frame<0) || (frame>=frame_count)) return;
     
-    draw->cur_texture_frame[wfill]=(unsigned char)txt;
+    draw->textures[txt_idx].frame=frame;
+}
+
+void model_texture_change_animation(model_draw *draw,int txt_idx,bool on,bool reverse)
+{
+	model_type			*mdl;
+    
+    if ((txt_idx<0) || (txt_idx>=max_model_texture)) return;
+    
+	if (draw->model_idx==-1) return;
+	mdl=server.model_list.models[draw->model_idx];
+    
+    draw->textures[txt_idx].animation_on=on;
+	if (on) draw->textures[txt_idx].animation_reverse=reverse;
 }
 
 /* =======================================================
@@ -77,8 +84,8 @@ void model_get_current_animation_name(model_draw *draw,char *name)
 	
 	name[0]=0x0;
 
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return;
+	if (draw->model_idx==-1) return;
+	mdl=server.model_list.models[draw->model_idx];
 
 	draw_animation=&draw->animations[draw->script_animation_idx];
 	if (draw_animation->animate_idx==-1) return;
@@ -88,17 +95,15 @@ void model_get_current_animation_name(model_draw *draw,char *name)
 
 int model_find_animation_from_draw(model_draw *draw,char *name)
 {
-	model_type					*mdl;
+	if (draw->model_idx==-1) return(-1);
 	
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return(-1);
-	
-	return(model_find_animate(mdl,name));
+	return(model_find_animate(server.model_list.models[draw->model_idx],name));
 }
 
-bool model_start_animation(model_draw *draw,char *name)
+bool model_start_animation(model_draw *draw,char *name,int tick)
 {
 	int							idx;
+	bool						no_smooth;
 	model_draw_animation		*draw_animation;
 	
 	idx=model_find_animation_from_draw(draw,name);
@@ -106,20 +111,32 @@ bool model_start_animation(model_draw *draw,char *name)
 	
 	draw_animation=&draw->animations[draw->script_animation_idx];
 
+		// cancel any rag doll
+
+	model_rag_doll_stop(draw);
+
 		// smooth out changes in animations
+		
+	draw_animation->smooth_animate_idx=-1;
+	draw_animation->smooth_pose_move_idx=0;
 
 	if (draw_animation->mode==am_playing) {
-		draw_animation->smooth_animate_idx=draw_animation->animate_idx;
-		draw_animation->smooth_pose_move_idx=draw_animation->pose_move_idx;
-	}
-	else {
-		draw_animation->smooth_animate_idx=-1;
-		draw_animation->smooth_pose_move_idx=0;
+	
+		no_smooth=FALSE;
+		
+		if (draw->model_idx!=-1) {
+			no_smooth=server.model_list.models[draw->model_idx]->animates[idx].no_smooth;
+		}
+		
+		if (!no_smooth) {
+			draw_animation->smooth_animate_idx=draw_animation->animate_idx;
+			draw_animation->smooth_pose_move_idx=draw_animation->pose_move_idx;
+		}
 	}
 
 		// set next animation
 
-	draw_animation->tick=game_time_get();
+	draw_animation->tick=tick;
 
 	draw_animation->animate_idx=idx;
 	draw_animation->animate_next_idx=-1;
@@ -127,6 +144,8 @@ bool model_start_animation(model_draw *draw,char *name)
 
     draw_animation->mode=am_playing;
 	
+		// catch any initial effects
+		
 	model_animation_effect_launch(draw,idx,0);
     
 	return(TRUE);
@@ -136,6 +155,8 @@ void model_stop_animation(model_draw *draw)
 {
 	model_draw_animation	*draw_animation;
 	
+		// stop animation
+
 	draw_animation=&draw->animations[draw->script_animation_idx];
 	
 	draw_animation->animate_idx=-1;
@@ -146,6 +167,35 @@ void model_stop_animation(model_draw *draw)
 	draw_animation->smooth_pose_move_idx=0;
     
     draw_animation->mode=am_stopped;
+
+		// cancel any rag doll
+
+	model_rag_doll_stop(draw);
+}
+
+void model_stop_all_animation(model_draw *draw)
+{
+	int						n;
+	model_draw_animation	*draw_animation;
+	
+		// stop animations
+
+	for (n=0;n!=max_model_blend_animation;n++) {
+		draw_animation=&draw->animations[n];
+		
+		draw_animation->animate_idx=-1;
+		draw_animation->animate_next_idx=-1;
+		draw_animation->pose_move_idx=0;
+
+		draw_animation->smooth_animate_idx=-1;
+		draw_animation->smooth_pose_move_idx=0;
+		
+		draw_animation->mode=am_stopped;
+	}
+
+		// cancel any rag doll
+
+	model_rag_doll_stop(draw);
 }
 
 bool model_cancel_animation(model_draw *draw,char *name)
@@ -163,7 +213,7 @@ bool model_cancel_animation(model_draw *draw,char *name)
 	return(TRUE);
 }
 
-bool model_change_animation(model_draw *draw,char *name)
+bool model_change_animation(model_draw *draw,char *name,int tick)
 {
 	int						idx;
 	model_draw_animation	*draw_animation;
@@ -171,7 +221,7 @@ bool model_change_animation(model_draw *draw,char *name)
 		// if not playing, then start new animation
 
 	draw_animation=&draw->animations[draw->script_animation_idx];
-	if (draw_animation->mode!=am_playing) return(model_start_animation(draw,name));
+	if (draw_animation->mode!=am_playing) return(model_start_animation(draw,name,tick));
 
 		// chain to next animation
 
@@ -179,11 +229,15 @@ bool model_change_animation(model_draw *draw,char *name)
 	if (idx==-1) return(FALSE);
 
 	draw_animation->animate_next_idx=idx;
+
+		// cancel any rag doll
+
+	model_rag_doll_stop(draw);
 	
 	return(TRUE);
 }
 
-bool model_interrupt_animation(model_draw *draw,char *name)
+bool model_interrupt_animation(model_draw *draw,char *name,int tick)
 {
 	int						old_animate_idx;
 	model_draw_animation	*draw_animation;
@@ -196,11 +250,15 @@ bool model_interrupt_animation(model_draw *draw,char *name)
 
 		// start interupted animation
 
-	if (!model_start_animation(draw,name)) return(FALSE);
+	if (!model_start_animation(draw,name,tick)) return(FALSE);
 
 		// old animation is chained to new one
 
 	draw_animation->animate_next_idx=old_animate_idx;
+
+		// cancel any rag doll
+
+	model_rag_doll_stop(draw);
 	
 	return(TRUE);
 }
@@ -211,9 +269,9 @@ bool model_interrupt_animation(model_draw *draw,char *name)
       
 ======================================================= */
 
-void model_run_animation_single(model_draw *draw,int animation_idx)
+void model_run_animation_single(model_draw *draw,int animation_idx,int tick)
 {
-	int						mode,tick,nxt_tick;
+	int						mode,nxt_tick;
 	model_type				*mdl;
 	model_animate_type		*animate;
  	model_draw_animation	*draw_animation;
@@ -227,8 +285,9 @@ void model_run_animation_single(model_draw *draw,int animation_idx)
 	
         // get model
         
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return;
+	if (draw->model_idx==-1) return;
+
+	mdl=server.model_list.models[draw->model_idx];
 
 		// if no poses, then no animation
 	
@@ -238,7 +297,6 @@ void model_run_animation_single(model_draw *draw,int animation_idx)
 		// loop until all pose changes for this
 		// time frame are accomplished
 	
-	tick=game_time_get();
 	nxt_tick=draw_animation->tick+animate->pose_moves[draw_animation->pose_move_idx].msec;
 	
 	while (tick>=nxt_tick) {
@@ -287,10 +345,10 @@ void model_run_animation_single(model_draw *draw,int animation_idx)
             else {
 
 					// non-looping, go to last pose and then
-					// into resting
+					// into resting or stopping
 
 				if (draw_animation->pose_move_idx>=animate->npose_move) {
-					draw_animation->mode=am_resting;
+					draw_animation->mode=animate->auto_stop?am_stopped:am_resting;
 					draw_animation->pose_move_idx=animate->npose_move-1;
 					return;
 				}
@@ -303,23 +361,23 @@ void model_run_animation_single(model_draw *draw,int animation_idx)
 		nxt_tick=draw_animation->tick+animate->pose_moves[draw_animation->pose_move_idx].msec;
 		
 			// any effects
-
+			
 		model_animation_effect_launch(draw,draw_animation->animate_idx,draw_animation->pose_move_idx);
 	}
 }
 
-void model_run_animation(model_draw *draw)
+void model_run_animation(model_draw *draw,int tick)
 {
 	int						n;
    
 		// no model, no animation
 
-	if (draw->uid==-1) return;
+	if (draw->model_idx==-1) return;
 
 		// run all the animations
 
 	for (n=0;n!=max_model_blend_animation;n++) {
-		model_run_animation_single(draw,n);
+		model_run_animation_single(draw,n,tick);
 	}
 }
 
@@ -409,9 +467,10 @@ model_pose_move_type* model_calc_animation_second_pose(model_type *mdl,model_dra
       
 ======================================================= */
 
-void model_calc_animation_poses(model_draw *draw)
+void model_calc_animation_poses(model_draw *draw,int tick)
 {
 	int						n,k;
+	float					enhance_factor;
 	model_type				*mdl;
 	model_draw_animation	*animation;
     model_pose_move_type	*pose_move_1,*pose_move_2;
@@ -433,8 +492,14 @@ void model_calc_animation_poses(model_draw *draw)
 
 		// get model
 
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return;
+	if (draw->model_idx==-1) return;
+
+	mdl=server.model_list.models[draw->model_idx];
+
+		// enhancement factor comes
+		// only from first animation
+
+	enhance_factor=1.0f;
 
 		// run through all animations
 
@@ -449,6 +514,10 @@ void model_calc_animation_poses(model_draw *draw)
 
 		pose_move_1=model_calc_animation_first_pose(mdl,draw,n);
 		pose_move_2=model_calc_animation_second_pose(mdl,draw,n);
+
+			// build the enhancement
+
+		if (n==0) enhance_factor=mdl->animates[animation->animate_idx].enhance_factor;
 
 			// single pose?
 		
@@ -473,13 +542,17 @@ void model_calc_animation_poses(model_draw *draw)
 			setup_pose->factor=1.0f;
 		}
 		else {
-			k=(1000*(game_time_get()-animation->tick))/pose_move_1->msec;
+			k=(1000*(tick-animation->tick))/pose_move_1->msec;
 			if (k<0) k=0;
 			if (k>1000) k=1000;
 
 			setup_pose->factor=((float)(1000-k))/1000.0f;
 		}
 	}
+
+		// move in enhancement factor
+
+	setup->enhance_factor=enhance_factor;
 }
 
 void model_calc_animation_move_sway(model_draw *draw)
@@ -505,8 +578,9 @@ void model_calc_animation_move_sway(model_draw *draw)
 	animation=&draw->animations[0];
     if (animation->mode==am_stopped) return;
 
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return;
+	if (draw->model_idx==-1) return;
+
+	mdl=server.model_list.models[draw->model_idx];
 
 	pose_move_1=model_calc_animation_first_pose(mdl,draw,0);
 	pose_move_2=model_calc_animation_second_pose(mdl,draw,0);
@@ -535,9 +609,9 @@ void model_calc_animation_move_sway(model_draw *draw)
 	setup->sway.z=pose_move_2->sway.z+((pose_move_1->sway.z-pose_move_2->sway.z)*pose_factor);
 }
 
-void model_calc_animation(model_draw *draw)
+void model_calc_animation(model_draw *draw,int tick)
 {
-	model_calc_animation_poses(draw);
+	model_calc_animation_poses(draw,tick);
 	model_calc_animation_move_sway(draw);
 }
 
@@ -549,10 +623,7 @@ void model_calc_animation(model_draw *draw)
 
 void model_calc_draw_bones(model_draw *draw)
 {
-	model_type			*mdl;
-		
-	mdl=model_find_uid(draw->uid);
-	if (mdl!=NULL) model_create_draw_bones(mdl,&draw->setup);
+	if (draw->model_idx!=-1) model_create_draw_bones(server.model_list.models[draw->model_idx],&draw->setup);
 }
 
 /* =======================================================
@@ -576,12 +647,10 @@ int model_get_current_pose(model_draw *draw)
 
 	if ((animate_idx==-1) || (pose_move_idx==-1)) return(-1);
 
-		// get model
-
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return(-1);
-
 		// find pose index
+
+	if (draw->model_idx==-1) return(-1);
+	mdl=server.model_list.models[draw->model_idx];
 
 	return(mdl->animates[animate_idx].pose_moves[pose_move_idx].pose_idx);
 }
@@ -592,14 +661,14 @@ int model_get_current_pose(model_draw *draw)
       
 ======================================================= */
 
-bool model_find_bone_offset(model_draw *draw,char *pose_name,char *bone_name,int *x,int *y,int *z)
+bool model_find_bone_offset(model_draw *draw,char *pose_name,char *bone_name,d3pnt *pnt)
 {
 	int					pose_idx,bone_idx;
-	model_tag			tag;
 	model_type			*mdl;
 		
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return(FALSE);
+	if (draw->model_idx==-1) return(FALSE);
+
+	mdl=server.model_list.models[draw->model_idx];
 	
 		// get pose index
 		
@@ -611,82 +680,210 @@ bool model_find_bone_offset(model_draw *draw,char *pose_name,char *bone_name,int
 	
 		// get bone index
 		
-	tag=text_to_model_tag(bone_name);
-	bone_idx=model_find_bone(mdl,tag);
+	bone_idx=model_find_bone(mdl,bone_name);
 	if (bone_idx==-1) return(FALSE);
 	
 		// get bone
 
-	model_calc_draw_bone_position(mdl,&draw->setup,pose_idx,bone_idx,x,y,z);
-
-	return(TRUE);
-}
-
-bool model_find_bone_position(model_draw *draw,char *pose_name,char *bone_name,int *x,int *y,int *z)
-{
-	if (!model_find_bone_offset(draw,pose_name,bone_name,x,y,z)) return(FALSE);
+	model_calc_draw_bone_position(mdl,&draw->setup,pose_idx,bone_idx,pnt);
 	
-	*x=(*x)+draw->pnt.x;
-	*y=(*y)+draw->pnt.y;
-	*z=(*z)+draw->pnt.z;
-
-	if (draw->no_rot.on) gl_project_fix_rotation(x,y,z);
-	
-	return(TRUE);
-}
-
-bool model_find_bone_position_for_current_animation(model_draw *draw,int bone_idx,int *x,int *y,int *z)
-{
-	int						animate_idx,animate_pose_move_idx,pose_idx;
-	model_type				*mdl;
-	model_draw_animation	*animation;
+		// handle any flips
 		
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return(FALSE);
+	if (draw->flip_x) pnt->x=-pnt->x;
 
-		// get current pose
+	return(TRUE);
+}
 
-	animation=&draw->animations[draw->script_animation_idx];
+bool model_find_bone_position(model_draw *draw,char *pose_name,char *bone_name,d3pnt *pnt)
+{
+	if (!model_find_bone_offset(draw,pose_name,bone_name,pnt)) return(FALSE);
+	
+	pnt->x+=draw->pnt.x;
+	pnt->y+=draw->pnt.y;
+	pnt->z+=draw->pnt.z;
+	
+	return(TRUE);
+}
 
-	animate_idx=animation->animate_idx;
-	animate_pose_move_idx=animation->pose_move_idx;
+bool model_get_last_draw_bone_position(model_draw *draw,int bone_idx,d3pnt *pnt)
+{
+	if (draw->model_idx==-1) return(FALSE);
 
-	if ((animate_idx==-1) || (animate_pose_move_idx==-1)) return(FALSE);
+		// get last calculated position
 
-	pose_idx=mdl->animates[animate_idx].pose_moves[animate_pose_move_idx].pose_idx;
+	model_get_draw_bone_position(&draw->setup,bone_idx,pnt);
+	
+		// handle any flips
+		
+	if (draw->flip_x) pnt->x=-pnt->x;
 
-		// calculate bones
-
-	model_create_draw_bones(mdl,&draw->setup);
-	model_get_draw_bone_position(&draw->setup,bone_idx,x,y,z);
-
-	*x=(*x)+draw->pnt.x;
-	*y=(*y)+draw->pnt.y;
-	*z=(*z)+draw->pnt.z;
-
-		// fix rotation
-
-	if (draw->no_rot.on) gl_project_fix_rotation(x,y,z);
+	pnt->x+=draw->pnt.x;
+	pnt->y+=draw->pnt.y;
+	pnt->z+=draw->pnt.z;
 
 	return(TRUE);
 }
 
 bool model_get_bone_brightness(model_draw *draw,char *pose_name,char *bone_name,float *bright)
 {
-	int				x,y,z;
 	float			pc[3];
+	d3pnt			pnt;
 	
 		// get bone position
 		
-	if (!model_find_bone_position(draw,pose_name,bone_name,&x,&y,&z)) return(FALSE);
+	if (!model_find_bone_position(draw,pose_name,bone_name,&pnt)) return(FALSE);
 	
 		// light at position
 
-	gl_lights_calc_vertex((double)x,(double)y,(double)z,pc);
+	gl_lights_calc_color((float)pnt.x,(float)pnt.y,(float)pnt.z,pc);
 	
-	*bright=(pc[0]+pc[1]+pc[2])/3.0f;
+	*bright=(pc[0]+pc[1]+pc[2])*0.33f;
 	if (*bright<0.0f) *bright=0.0f;
 	
 	return(TRUE);
 }
+
+/* =======================================================
+
+      Model Dynamic Bones
+      
+======================================================= */
+
+model_type* model_dynamic_bone_get_model(model_draw *draw,char *err_str)
+{
+	if (draw->model_idx==-1) {
+		strcpy(err_str,"No model to set bones on");
+		return(NULL);
+	}
+
+	return(server.model_list.models[draw->model_idx]);
+}
+
+int model_dynamic_bone_get_bone_idx(model_type *mdl,char *bone_name,char *err_str)
+{
+	int					bone_idx;
+
+	bone_idx=model_find_bone(mdl,bone_name);
+	if (bone_idx!=-1) return(bone_idx);
+
+	sprintf(err_str,"Bone name '%s' does not exist in model '%s'",bone_name,mdl->name);
+	return(-1);
+}
+
+int model_dynamic_bone_find_bone_spot(model_draw *draw,int bone_idx,char *err_str)
+{
+	int						n,blank_idx;
+	model_draw_dynamic_bone	*dyn_bone;
+
+		// see if we already have a change
+		// of this type, if so, replace
+
+	blank_idx=-1;
+	dyn_bone=draw->dynamic_bones;
+
+	for (n=0;n!=max_model_dynamic_bone;n++) {
+		if (dyn_bone->bone_idx==-1) {
+			if (blank_idx==-1) blank_idx=n;
+		}
+		else {
+			if (dyn_bone->bone_idx==bone_idx) return(n);
+		}
+	}
+
+		// is there a blank?
+
+	if (blank_idx!=-1) {
+
+			// clear blank bone
+
+		dyn_bone=&draw->dynamic_bones[blank_idx];
+
+		dyn_bone->bone_idx=bone_idx;
+
+		dyn_bone->resize=1.0f;
+		dyn_bone->mov.x=dyn_bone->mov.y=dyn_bone->mov.z=0.0f;
+		dyn_bone->rot.x=dyn_bone->rot.y=dyn_bone->rot.z=0.0f;
+
+		return(blank_idx);
+	}
+
+		// no dynamic bones left
+
+	sprintf(err_str,"You can only have %d dynamic bones per model",max_model_dynamic_bone);
+	return(-1);
+}
+
+bool model_dynamic_bone_set_rotate(model_draw *draw,char *bone_name,d3ang *rot,char *err_str)
+{
+	int					bone_idx,dyn_bone_idx;
+	model_type			*mdl;
+
+		// get structs
+
+	mdl=model_dynamic_bone_get_model(draw,err_str);
+	if (mdl==NULL) return(FALSE);
+
+	bone_idx=model_dynamic_bone_get_bone_idx(mdl,bone_name,err_str);
+	if (bone_idx==-1) return(FALSE);
+
+	dyn_bone_idx=model_dynamic_bone_find_bone_spot(draw,bone_idx,err_str);
+	if (dyn_bone_idx==-1) return(FALSE);
+
+		// setup
+
+	draw->dynamic_bones[dyn_bone_idx].rot.x=rot->x;
+	draw->dynamic_bones[dyn_bone_idx].rot.y=rot->y;
+	draw->dynamic_bones[dyn_bone_idx].rot.z=rot->z;
+
+	return(TRUE);
+}
+
+bool model_dynamic_bone_set_move(model_draw *draw,char *bone_name,d3pnt *mov,char *err_str)
+{
+	int					bone_idx,dyn_bone_idx;
+	model_type			*mdl;
+
+		// get structs
+
+	mdl=model_dynamic_bone_get_model(draw,err_str);
+	if (mdl==NULL) return(FALSE);
+
+	bone_idx=model_dynamic_bone_get_bone_idx(mdl,bone_name,err_str);
+	if (bone_idx==-1) return(FALSE);
+
+	dyn_bone_idx=model_dynamic_bone_find_bone_spot(draw,bone_idx,err_str);
+	if (dyn_bone_idx==-1) return(FALSE);
+
+		// setup
+
+	draw->dynamic_bones[dyn_bone_idx].mov.x=(float)mov->x;
+	draw->dynamic_bones[dyn_bone_idx].mov.y=(float)mov->y;
+	draw->dynamic_bones[dyn_bone_idx].mov.z=(float)mov->z;
+
+	return(TRUE);
+}
+
+bool model_dynamic_bone_set_resize(model_draw *draw,char *bone_name,float resize,char *err_str)
+{
+	int					bone_idx,dyn_bone_idx;
+	model_type			*mdl;
+
+		// get structs
+
+	mdl=model_dynamic_bone_get_model(draw,err_str);
+	if (mdl==NULL) return(FALSE);
+
+	bone_idx=model_dynamic_bone_get_bone_idx(mdl,bone_name,err_str);
+	if (bone_idx==-1) return(FALSE);
+
+	dyn_bone_idx=model_dynamic_bone_find_bone_spot(draw,bone_idx,err_str);
+	if (dyn_bone_idx==-1) return(FALSE);
+
+		// setup
+
+	draw->dynamic_bones[dyn_bone_idx].resize=resize;
+
+	return(TRUE);
+}
+
 

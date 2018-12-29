@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,66 +29,181 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "consoles.h"
-#include "video.h"
-#include "lights.h"
+#include "interface.h"
 
 extern map_type				map;
 extern server_type			server;
 extern view_type			view;
 extern setup_type			setup;
 
-extern bool					dim3_debug;
+extern bitmap_type			lmap_white_bitmap;
 
-extern bool boundbox_inview(int x,int z,int ex,int ez,int ty,int by);
-
+float						liquid_normal_cycle_xz[4]={0.0f,0.5f,0.0f,-0.5f},
+							liquid_normal_cycle_y[4]={-1.0f,-0.5f,-1.0f,-0.5f};
+							
 /* =======================================================
 
-      Initialize Liquid GL Lists
+      Liquid Tides
       
 ======================================================= */
 
-inline int liquid_render_liquid_get_tide_split(map_liquid_type *liq)
+float liquid_tide_get_high(map_liquid_type *liq)
 {
-	int				tide_split;
+	float			f_time,sn;
 
-	tide_split=liq->rgt-liq->lft;
-	if ((liq->bot-liq->top)>tide_split) tide_split=liq->bot-liq->top;
+		// get rate between 0..1
+
+	f_time=(float)(game_time_get()%liq->tide.rate);
+	f_time=f_time/((float)liq->tide.rate);
 	
-	if (liq->tide.flat) return(tide_split);
-	
-	return(tide_split/liq->tide.division);
+		// waves are sin waves
+
+	sn=sinf((TRIG_PI*2.0f)*f_time);
+	return(((float)liq->tide.high)*sn);
 }
 
-inline int liquid_render_liquid_get_max_vertex(map_liquid_type *liq)
+float liquid_tide_get_uv_factor(map_liquid_type *liq)
 {
-	int				tide_split,x_sz,z_sz;
+	float			f_time,sn,shift;
+
+		// get rate between 0..1
+
+	f_time=(float)(game_time_get()%liq->tide.rate);
+	f_time=f_time/((float)liq->tide.rate);
 	
-	tide_split=liquid_render_liquid_get_tide_split(liq);
+		// waves are sin waves
 
-	x_sz=((liq->rgt-liq->lft)/tide_split)+4;		// possible extra edges on side because of griding
-	z_sz=((liq->bot-liq->top)/tide_split)+4;
-
-	return(x_sz*z_sz);
+	sn=sinf((TRIG_PI*2.0f)*f_time);
+	
+	shift=liq->tide.uv_shift*0.5f;
+	return(shift+(shift*sn));
 }
 
-void liquid_gl_list_init(void)
+/* =======================================================
+
+      Liquid Waves
+      
+======================================================= */
+
+int liquid_wave_get_divisions(map_liquid_type *liq)
 {
-	int					n,v_sz,sz;
-	map_liquid_type		*liq;
+	int			len,count;
 
-	sz=0;
+	if (!liq->wave.on) return(1);
 
-	liq=map.liquid.liquids;
-
-	for (n=0;n!=map.liquid.nliquid;n++) {
-		v_sz=liquid_render_liquid_get_max_vertex(liq);
-		if (v_sz>sz) sz=v_sz;
-		liq++;
+	if (liq->wave.dir_north_south) {
+		len=liq->bot-liq->top;
+	}
+	else {
+		len=liq->rgt-liq->lft;
 	}
 
-	view_init_liquid_vertex_object(v_sz*(3+2+3));
-	view_init_liquid_index_object(v_sz*4);
+	count=len/liq->wave.length;
+	if ((len%liq->wave.length)!=0) count++;
+
+	return(count);
+}
+
+void liquid_wave_get_high(map_liquid_type *liq,float *wave_y)
+{
+	float			f,fy,f_time,cs;
+	
+		// start with the tide height
+
+	fy=((float)liq->y)-liquid_tide_get_high(liq);
+
+		// if no waves, then flat Ys
+
+	if (!liq->wave.on) {
+		wave_y[0]=wave_y[1]=wave_y[2]=wave_y[3]=fy;
+		return;
+	}
+
+		// get rate between 0..1
+
+	f_time=(float)(game_time_get()%liq->wave.period_msec);
+	f_time=f_time/((float)liq->wave.period_msec);
+	
+		// waves are sin waves
+
+	cs=cosf((TRIG_PI*2.0f)*f_time);
+	f=((float)liq->wave.high)*cs;
+	
+	wave_y[0]=fy-f;
+	wave_y[1]=wave_y[3]=fy-(f*0.5f);
+	wave_y[2]=fy-(f*0.25f);
+}
+
+void liquid_wave_get_normal_x(map_liquid_type *liq,int div,float *wave_y,int lft_add,d3vct *normal)
+{
+	int				lft,lft_prev,lft_next,
+					y,y_prev,y_next;
+	d3vct			p10,p20,n1,n2;
+
+	lft=liq->lft+(lft_add*div);
+	y=(int)wave_y[div&0x3];
+
+	lft_prev=lft-lft_add;
+	y_prev=(int)wave_y[(div-1)&0x3];
+
+	lft_next=lft+lft_add;
+	y_next=(int)wave_y[(div+1)&0x3];
+
+		// get previous and next
+		// polygon normals
+
+	vector_create(&p10,lft_prev,y_prev,liq->top,lft_prev,y_prev,liq->bot);
+	vector_create(&p20,lft,y,liq->bot,lft_prev,y_prev,liq->bot);
+	vector_cross_product(&n1,&p10,&p20);
+	vector_normalize(&n1);
+
+	vector_create(&p10,lft,y,liq->top,lft,y,liq->bot);
+	vector_create(&p20,lft_next,y_next,liq->bot,lft,y,liq->bot);
+	vector_cross_product(&n2,&p10,&p20);
+	vector_normalize(&n2);
+
+		// average for normal
+
+	normal->x=(n1.x+n2.x)*0.5f;
+	normal->y=(n1.y+n2.y)*0.5f;
+	normal->z=(n1.z+n2.z)*0.5f;
+	vector_normalize(normal);
+}
+
+void liquid_wave_get_normal_z(map_liquid_type *liq,int div,float *wave_y,int top_add,d3vct *normal)
+{
+	int				top,top_prev,top_next,
+					y,y_prev,y_next;
+	d3vct			p10,p20,n1,n2;
+
+	top=liq->top+(top_add*div);
+	y=(int)wave_y[div&0x3];
+
+	top_prev=top-top_add;
+	y_prev=(int)wave_y[(div-1)&0x3];
+
+	top_next=top+top_add;
+	y_next=(int)wave_y[(div+1)&0x3];
+
+		// get previous and next
+		// polygon normals
+
+	vector_create(&p10,liq->rgt,y_prev,top_prev,liq->lft,y_prev,top_prev);
+	vector_create(&p20,liq->lft,y,top,liq->lft,y_prev,top_prev);
+	vector_cross_product(&n1,&p10,&p20);
+	vector_normalize(&n1);
+
+	vector_create(&p10,liq->rgt,y,top,liq->lft,y,top);
+	vector_create(&p20,liq->lft,y_next,top_next,liq->lft,y,top);
+	vector_cross_product(&n2,&p10,&p20);
+	vector_normalize(&n2);
+
+		// average for normal
+
+	normal->x=(n1.x+n2.x)*0.5f;
+	normal->y=(n1.y+n2.y)*0.5f;
+	normal->z=(n1.z+n2.z)*0.5f;
+	vector_normalize(normal);
 }
 
 /* =======================================================
@@ -102,7 +217,7 @@ bool liquid_is_transparent(map_liquid_type *liq)
 	texture_type				*texture;
 
 	texture=&map.textures[liq->txt_idx];
-	return((texture->frames[texture->animate.current_frame&max_texture_frame_mask].bitmap.alpha_mode==alpha_mode_transparent) || (liq->alpha!=1.0f));
+	return(!texture->frames[texture->animate.current_frame&max_texture_frame_mask].bitmap.opaque);
 }
 
 /* =======================================================
@@ -111,214 +226,279 @@ bool liquid_is_transparent(map_liquid_type *liq)
       
 ======================================================= */
 
-void liquid_render_liquid_create_vertex(int tick,map_liquid_type *liq,int v_sz,bool shader_on)
+bool liquid_render_liquid_create_vertex(map_liquid_type *liq,float uv_shift,bool is_overlay)
 {
-	int				x,y,z,k,x_add,z_add,x_sz,z_sz,
-					v_cnt,tide_split,tide_split_half,
-					tide_high,tide_rate;
-	float			fy,fgx,fgy,x_txtoff,y_txtoff,
-					f_break,f_time,f_tick,sn,
-					f_tide_split_half,f_tide_high;
-	bool			x_break,z_break;
-	float			*vertex_ptr,*vl,*uv,*cl;
+	int				k,div,div_count,lft,rgt,top,bot,
+					top_add,lft_add;
+	float			fy,wave_y[4],f_tick,f_stamp_size,
+					gx,gy,gx2,gy2,gx_add,gy_add,
+					lmap_gx,lmap_gy,lmap_gx2,lmap_gy2,lmap_gx_add,lmap_gy_add;
+	float			*cf;
+	unsigned char	*vertex_ptr,*vp;
+	d3vct			normal;
 	
-	y=liq->y;
-	fy=(float)y;
-
 		// setup vbo
-
-	vertex_ptr=view_bind_map_liquid_vertex_object();
-	if (vertex_ptr==NULL) return;
-	
-	vl=vertex_ptr;
-	uv=vertex_ptr+(v_sz*3);
-	cl=vertex_ptr+(v_sz*(3+2));
-
-		// setup tiding
-
-	tide_split=liquid_render_liquid_get_tide_split(liq);
-	
-	tide_high=liq->tide.high;
-	if (tide_high<1) tide_high=1;
-	
-	tide_rate=liq->tide.rate;
-	if (tide_rate<1) tide_rate=1;
-
-	tide_split_half=tide_split<<2;
-	f_tide_split_half=(float)tide_split_half;
-	
-	f_tide_high=(float)tide_high;
-
-	f_time=(float)(tick%tide_rate);		// get rate between 0..1
-	f_time=f_time/(float)tide_rate;
-	
-		// liquid texture movement
 		
-	f_tick=(float)tick*0.001f;
-	
-	x_txtoff=f_tick*liq->x_shift;
-	k=(int)x_txtoff;
-	x_txtoff=liq->x_txtoff+(x_txtoff-(float)k);
-	
-	y_txtoff=f_tick*liq->y_shift;
-	k=(int)y_txtoff;
-	y_txtoff=liq->y_txtoff+(y_txtoff-(float)k);
+	view_bind_mesh_liquid_vertex_object(&liq->vbo);
 
-		// create vertexes from tide splits
+	vertex_ptr=view_map_mesh_liquid_vertex_object(&liq->vbo);
+	if (vertex_ptr==NULL) {
+		view_unbind_mesh_liquid_vertex_object();
+		return(FALSE);
+	}
 
-	fgx=(float)(liq->rgt-liq->lft);
-	fgy=(float)(liq->bot-liq->top);
+		// uv shift tick
 		
-	z=liq->top;
-	z_add=tide_split-(z%tide_split);
-	z_break=FALSE;
+	f_tick=((float)game_time_get())*0.001f;
 
-	v_cnt=0;
-
-	z_sz=0;
-	
-	while (TRUE) {
-
-		x=liq->lft;
-		x_add=tide_split-(x%tide_split);
-		x_break=FALSE;
-
-		x_sz=0;
+		// liquid texture uvs
 		
-		while (TRUE) {
+	if (is_overlay) {
+		gx_add=f_tick*liq->overlay.shift.x;
+		k=(int)gx_add;
+		gx_add=gx_add-(float)k;
+		
+		gy_add=f_tick*liq->overlay.shift.y;
+		k=(int)gy_add;
+		gy_add=gy_add-(float)k;
 
-				// color
+		f_stamp_size=1.0f/((float)liq->overlay.stamp_size);
+		
+		gx=((float)liq->lft)*f_stamp_size;
+		gx2=((float)liq->rgt)*f_stamp_size;
+		
+		k=(int)gx;
+		gx-=((float)k);
+		gx2-=((float)k);
+		
+		gy=((float)liq->top)*f_stamp_size;
+		gy2=((float)liq->bot)*f_stamp_size;
+		
+		k=(int)gx;
+		gy-=((float)k);
+		gy2-=((float)k);
 
-			if ((dim3_debug) || (shader_on)) {
-				*cl=*(cl+1)=*(cl+2)=1.0f;
-			}
-			else {
-				gl_lights_calc_vertex((double)x,(double)y,(double)z,cl);
-			}
+		gx+=gx_add;
+		gy+=gy_add;
+		
+		gx2+=gx_add;
+		gy2+=gy_add;
+	}
+	else {
+		gx_add=f_tick*liq->shift.x;
+		k=(int)gx_add;
+		gx_add=gx_add-(float)k;
+		
+		gy_add=f_tick*liq->shift.y;
+		k=(int)gy_add;
+		gy_add=gy_add-(float)k;
+
+		gx=liq->main_uv.offset.x+gx_add;
+		gy=liq->main_uv.offset.y+gy_add;
+
+		gx2=gx+liq->main_uv.size.x;
+		gy2=gy+liq->main_uv.size.y;
+	}
+	
+		// uv factors
+
+	gx+=uv_shift;
+	gy+=uv_shift;
+	gx2-=uv_shift;
+	gy2-=uv_shift;
+
+		// build the tide and wave Y
+
+	liquid_wave_get_high(liq,wave_y);
+
+		// get div count and setup
+		// the division calculations
+
+	lft=liq->lft;
+	rgt=liq->rgt;
+	top=liq->top;
+	bot=liq->bot;
+
+	lmap_gx=liq->lmap_uv.offset.x;
+	lmap_gx2=liq->lmap_uv.offset.x+liq->lmap_uv.size.x;
+
+	lmap_gy=liq->lmap_uv.offset.y;
+	lmap_gy2=liq->lmap_uv.offset.y+liq->lmap_uv.size.y;
+
+	div_count=liquid_wave_get_divisions(liq);
+	
+	lft_add=rgt-lft;
+	gx_add=gx2-gx;
+	lmap_gx_add=lmap_gx2-lmap_gx;
+
+	top_add=bot-top;
+	gy_add=gy2-gy;
+	lmap_gy_add=lmap_gy2-lmap_gy;
+
+	if (liq->wave.on) {
+		if (liq->wave.dir_north_south) {
+			top_add=liq->wave.length;
+			gy_add=(gy2-gy)/((float)div_count);
+			lmap_gy_add=(lmap_gy2-lmap_gy)/((float)div_count);
+		}
+		else {
+			lft_add=liq->wave.length;
+			gx_add=(gx2-gx)/((float)div_count);
+			lmap_gx_add=(lmap_gx2-lmap_gx)/((float)div_count);
+		}
+	}
+	
+		// draw the divisions
+
+	vp=vertex_ptr;
+
+	for (div=0;div<=div_count;div++) {
+
+		fy=wave_y[div&0x3];
+
+			// north-south (z) waves
+		
+		if (liq->wave.dir_north_south) {
+
+				// normal
+
+			liquid_wave_get_normal_z(liq,div,wave_y,top_add,&normal);
 			
-			cl+=3;
+				// left-top
+			
+			cf=(float*)vp;
 
-				// setup tide Y
+			*cf++=(float)lft;
+			*cf++=fy;
+			*cf++=(float)top;
 
-			if (liq->tide.direction==liquid_direction_vertical) {
-				f_break=(float)(z%tide_split_half);
-			}
-			else {
-				f_break=(float)(x%tide_split_half);
-			}
+			*cf++=gx;
+			*cf++=gy;
+
+			*cf++=lmap_gx;
+			*cf++=lmap_gy;
+			
+			*cf++=1.0f;
+			*cf++=0.0f;
+			*cf++=0.0f;
+		
+			*cf++=normal.x;
+			*cf++=normal.y;
+			*cf++=normal.z;
+			
+			vp+=liq->vbo.vertex_stride;
+
+				// right-top
+
+			cf=(float*)vp;
+
+			*cf++=(float)rgt;
+			*cf++=fy;
+			*cf++=(float)top;
+
+			*cf++=gx2;
+			*cf++=gy;
+
+			*cf++=lmap_gx2;
+			*cf++=lmap_gy;
 				
-			f_break=f_break/f_tide_split_half;
-		   
-			sn=(float)sin((TRIG_PI*2.0f)*(f_break+f_time));
-
-				// vertex and uvs
-
-			*vl++=(float)x;
-			*vl++=fy-(f_tide_high*sn);
-			*vl++=(float)z;
-
-			*uv++=x_txtoff+((liq->x_txtfact*(float)(x-liq->lft))/fgx);
-			*uv++=y_txtoff+((liq->y_txtfact*(float)(z-liq->top))/fgy);
+			*cf++=1.0f;
+			*cf++=0.0f;
+			*cf++=0.0f;
+		
+			*cf++=normal.x;
+			*cf++=normal.y;
+			*cf++=normal.z;
 			
-			v_cnt++;
-			
-			x_sz++;
+			vp+=liq->vbo.vertex_stride;
 
-			if (x_break) break;
-			
-			x+=x_add;
-			x_add=tide_split;
-			
-			if (x>=liq->rgt) {
-				x=liq->rgt;
-				x_break=TRUE;
-			}
+				// div change
+
+			top+=top_add;
+			if (top>liq->bot) top=liq->bot;
+
+			gy+=gy_add;
+			if (gy>gy2) gy=gy2;
+
+			lmap_gy+=lmap_gy_add;
+			if (lmap_gy>lmap_gy2) lmap_gy=lmap_gy2;
 		}
 
-		z_sz++;
+			// east-west (x) waves
+
+		else {
+
+				// normal
+
+			liquid_wave_get_normal_x(liq,div,wave_y,lft_add,&normal);
+			
+				// left-top
+
+			cf=(float*)vp;
+
+			*cf++=(float)lft;
+			*cf++=fy;
+			*cf++=(float)top;
+
+			*cf++=gx;
+			*cf++=gy;
+
+			*cf++=lmap_gx;
+			*cf++=lmap_gy;
+			
+			*cf++=1.0f;
+			*cf++=0.0f;
+			*cf++=0.0f;
 		
-		if (z_break) break;
+			*cf++=normal.x;
+			*cf++=normal.y;
+			*cf++=normal.z;
+			
+			vp+=liq->vbo.vertex_stride;
+
+				// left-bottom
+
+			cf=(float*)vp;
+
+			*cf++=(float)lft;
+			*cf++=fy;
+			*cf++=(float)bot;
+
+			*cf++=gx;
+			*cf++=gy2;
+
+			*cf++=lmap_gx;
+			*cf++=lmap_gy2;
+			
+			*cf++=1.0f;
+			*cf++=0.0f;
+			*cf++=0.0f;
 		
-		z+=z_add;
-		z_add=tide_split;
+			*cf++=normal.x;
+			*cf++=normal.y;
+			*cf++=normal.z;
 		
-		if (z>=liq->bot) {
-			z=liq->bot;
-			z_break=TRUE;
+			vp+=liq->vbo.vertex_stride;
+
+				// div change
+
+			lft+=lft_add;
+			if (lft>liq->rgt) lft=liq->rgt;
+
+			gx+=gx_add;
+			if (gx>gx2) gx=gx2;
+
+			lmap_gx+=lmap_gx_add;
+			if (lmap_gx>lmap_gx2) lmap_gx=lmap_gx2;
 		}
 	}
 
-	view_unmap_liquid_vertex_object();
+	view_unmap_mesh_liquid_vertex_object();
+	view_unbind_mesh_liquid_vertex_object();
 
-		// setup split sizes
+		// indexes are pre-created on startup
 
-	liq->draw.v_cnt=v_cnt;
-
-	liq->draw.x_sz=x_sz;
-	liq->draw.z_sz=z_sz;
-}
-
-int liquid_render_liquid_create_quads(map_liquid_type *liq)
-{
-	int				x,z,x_sz,z_sz,quad_cnt,
-					tz,bz,tz_add,top_row,bot_row,
-					lx,rx,lx_add,tide_split;
-	unsigned int	*index_ptr;
-
-		// drawing the quads only draws to the edges
-
-	x_sz=liq->draw.x_sz-1;
-	if (x_sz<=0) return(0);
-
-	z_sz=liq->draw.z_sz-1;
-	if (z_sz<=0) return(0);
-
-	tide_split=liquid_render_liquid_get_tide_split(liq);
-
-		// setup index vbo
-
-	index_ptr=view_bind_map_liquid_index_object();
-	if (index_ptr==NULL) return(0);
-
-		// create the draw indexes
-
-	quad_cnt=0;
-		
-	tz=liq->top;
-	tz_add=tide_split-(tz%tide_split);
-	top_row=0;
-	
-	for (z=0;z!=z_sz;z++) {
-		bz=tz+tz_add;
-		tz_add=tide_split;
-		if (bz>=liq->bot) bz=liq->bot;
-		
-		lx=liq->lft;
-		lx_add=tide_split-(lx%tide_split);
-		bot_row=top_row+(x_sz+1);
-		
-		for (x=0;x!=x_sz;x++) {
-			rx=lx+lx_add;
-			lx_add=tide_split;
-			if (rx>=liq->rgt) rx=liq->rgt;
-			
-			*index_ptr++=(unsigned int)(top_row+x);
-			*index_ptr++=(unsigned int)(top_row+(x+1));
-			*index_ptr++=(unsigned int)(bot_row+(x+1));
-			*index_ptr++=(unsigned int)(bot_row+x);
-
-			quad_cnt++;
-
-			lx=rx;
-		}
-	
-		tz=bz;
-		top_row=bot_row;
-	}
-
-	view_unmap_liquid_index_object();
-
-	return(quad_cnt);
+	return(TRUE);
 }
 
 /* =======================================================
@@ -327,16 +507,17 @@ int liquid_render_liquid_create_quads(map_liquid_type *liq)
       
 ======================================================= */
 
-void liquid_render_liquid(int tick,map_liquid_type *liq)
+void liquid_render_liquid_layer(map_liquid_type *liq,int txt_idx,int lmap_txt_idx,bool back_rendering)
 {
-	int							v_sz,quad_cnt,frame;
-	bool						shader_on;
+	int							frame;
+	float						alpha;
+	GLuint						gl_id;
 	texture_type				*texture;
 	view_glsl_light_list_type	light_list;
 
 		// setup texture
 
-	texture=&map.textures[liq->txt_idx];
+	texture=&map.textures[txt_idx];
 	frame=texture->animate.current_frame&max_texture_frame_mask;
 
 	if (texture->additive) {
@@ -345,80 +526,81 @@ void liquid_render_liquid(int tick,map_liquid_type *liq)
 	else {
 		glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
 	}
+	
+		// the liquid VBO
+	
+	view_bind_mesh_liquid_vertex_object(&liq->vbo);
+	view_bind_mesh_liquid_index_object(&liq->vbo);
 
-		// determine if shader in use
+	gl_shader_draw_execute_reset_cached_offsets();
 
-	shader_on=(!dim3_debug) && (texture->shader_idx!=-1);
+		// shader lights and tangents
 
-		// create vertexes
+	gl_lights_build_liquid_glsl_light_list(liq,&light_list);
 
-	v_sz=liquid_render_liquid_get_max_vertex(liq);
+	gl_shader_draw_execute_liquid_start(texture,txt_idx,frame,lmap_txt_idx,1.0f,0,(3*sizeof(float)),(5*sizeof(float)),(7*sizeof(float)),(10*sizeof(float)),liq->vbo.vertex_stride,&light_list);
+			
+		// fix texture if any back rendering
+		
+	gl_id=texture->frames[frame].bitmap.gl_id;
+	alpha=1.0f;
 
-	liquid_render_liquid_create_vertex(tick,liq,v_sz,shader_on);
-
-		// create quads
-
-	quad_cnt=liquid_render_liquid_create_quads(liq);
-	if (quad_cnt==0) {
-		view_unbind_liquid_vertex_object();
-		return;
+	if (back_rendering) {
+		if (gl_back_render_get_texture(liq->camera,&gl_id,&alpha)) {
+			gl_shader_texture_override(gl_id,alpha);
+		}
 	}
 	
-		// start vertex and UV array
+		// draw liquid
 
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(3,GL_FLOAT,0,0);
-		
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)((v_sz*3)*sizeof(float)));
-		
-		// shader drawing
+	glDrawElements(GL_TRIANGLE_STRIP,liq->vbo.index_count,GL_UNSIGNED_SHORT,(GLvoid*)0);
+	
+	gl_shader_draw_execute_liquid_end(texture,&light_list);
 
-	if (shader_on) {
+	view_unbind_mesh_liquid_vertex_object();
+	view_unbind_mesh_liquid_index_object();
+}
 
-		gl_lights_build_from_liquid(liq,&light_list);
+void liquid_render_liquid(map_liquid_type *liq)
+{
+	int					lmap_txt_idx;
+	float				uv_shift;
 
-		gl_shader_draw_start();
-		gl_shader_draw_execute(texture,liq->txt_idx,frame,-1,1.0f,liq->alpha,&light_list);
+		// uv factor
 
-		glDrawElements(GL_QUADS,(quad_cnt*4),GL_UNSIGNED_INT,(GLvoid*)0);
-		
-		gl_shader_draw_end();
+	uv_shift=liquid_tide_get_uv_factor(liq);
 
+		// get light map
+
+	if (!setup.debug_on) {
+		lmap_txt_idx=liq->lmap_txt_idx;
 	}
-
-		// regular simple texture drawing
-
 	else {
-
-			// need color pointers for simple drawing
-
-		glEnableClientState(GL_COLOR_ARRAY);
-		glColorPointer(3,GL_FLOAT,0,(void*)((v_sz*(3+2))*sizeof(float)));
-
-			// draw texture
-
-		gl_texture_transparent_start();
-		gl_texture_transparent_set(texture->frames[frame].bitmap.gl_id,liq->alpha);
-
-		glDrawElements(GL_QUADS,(quad_cnt*4),GL_UNSIGNED_INT,(GLvoid*)0);
-
-		gl_texture_transparent_end();
-
-			// disable color array
-
-		glDisableClientState(GL_COLOR_ARRAY);
+		lmap_txt_idx=lmap_white_bitmap.gl_id;
 	}
 
-		// end arrays
+		// draw the reflection liquid
+		// or just the regular texture
 
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
+	if (!liquid_render_liquid_create_vertex(liq,uv_shift,FALSE)) return;
 
-		// unmap VBOs
+	liquid_render_liquid_layer(liq,liq->txt_idx,lmap_txt_idx,TRUE);
+	
+		// count the liquid polys
+		
+	view.count.liquid_poly+=((liq->vbo.vertex_count+2)>>2);
 
-	view_unbind_liquid_index_object();
-	view_unbind_liquid_vertex_object();
+		// draw the overlay?
+
+	if ((!liq->overlay.on) || (liq->overlay.txt_idx==-1)) return;
+
+		// draw the overlay
+
+	view.count.liquid_poly+=((liq->vbo.vertex_count+2)>>2);
+
+	if (!liquid_render_liquid_create_vertex(liq,(uv_shift*0.5f),TRUE)) return;
+
+	liquid_render_liquid_layer(liq,liq->overlay.txt_idx,lmap_txt_idx,FALSE);
 }
 
 /* =======================================================
@@ -427,72 +609,54 @@ void liquid_render_liquid(int tick,map_liquid_type *liq)
       
 ======================================================= */
 
-void render_map_liquid_opaque(int tick)
+void render_map_liquid_opaque(void)
 {
 	int					n;
 	map_liquid_type		*liq;
-
-		// setup view
-
-	gl_3D_view();
-	gl_3D_rotate(&view.render->camera.pnt,&view.render->camera.ang);
-	gl_setup_project();
 	
-		// setup drawing
+		// common setup
 
 	glDisable(GL_BLEND);
 
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
-						
 	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LEQUAL);
-	glDepthMask(GL_FALSE);
-	
+
 		// draw opaque liquids
 		
 	for (n=0;n!=view.render->draw_list.count;n++) {
 		if (view.render->draw_list.items[n].type==view_render_type_liquid) {
 			liq=&map.liquid.liquids[view.render->draw_list.items[n].idx];
 			if (!liquid_is_transparent(liq)) {
-				liquid_render_liquid(tick,liq);
+				liquid_render_liquid(liq);
 			}
 		}
 	}
 }
 
-void render_map_liquid_transparent(int tick)
+void render_map_liquid_transparent(void)
 {
 	int					n;
 	map_liquid_type		*liq;
-
-		// setup view
-
-	gl_3D_view();
-	gl_3D_rotate(&view.render->camera.pnt,&view.render->camera.ang);
-	gl_setup_project();
 	
-		// setup drawing
+		// common setup
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
 						
 	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_FALSE);
-	
+
 		// draw transparent liquids
 		
 	for (n=0;n!=view.render->draw_list.count;n++) {
 		if (view.render->draw_list.items[n].type==view_render_type_liquid) {
 			liq=&map.liquid.liquids[view.render->draw_list.items[n].idx];
 			if (liquid_is_transparent(liq)) {
-				liquid_render_liquid(tick,liq);
+				liquid_render_liquid(liq);
 			}
 		}
 	}
+	
+	glDisable(GL_BLEND);
+	glDepthMask(GL_TRUE);
 }
 

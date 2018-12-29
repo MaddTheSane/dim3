@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,25 +29,36 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "projectiles.h"
-#include "models.h"
-#include "consoles.h"
-#include "video.h"
+#include "interface.h"
+#include "objects.h"
 
+extern app_type			app;
 extern server_type		server;
 extern setup_type		setup;
+extern iface_type		iface;
 
 /* =======================================================
 
-      Start Model Data
+      Model Lists
       
 ======================================================= */
 
-void model_initialize(void)
+void model_initialize_list(void)
 {
-	server.models=NULL;
-	server.count.model=0;
-	server.uid.model=0;
+	int				n;
+
+	for (n=0;n!=max_model_list;n++) {
+		server.model_list.models[n]=NULL;
+	}
+}
+
+void model_free_list(void)
+{
+	int				n;
+	
+	for (n=0;n!=max_model_list;n++) {
+		if (server.model_list.models[n]==NULL) free(server.model_list.models[n]);
+	}
 }
 
 /* =======================================================
@@ -56,49 +67,34 @@ void model_initialize(void)
       
 ======================================================= */
 
-int model_find_uid_index(int uid)
-{
-	int				n;
-	model_type		*mdl;
-
-	mdl=server.models;
-	
-	for (n=0;n!=server.count.model;n++) {
-		if (mdl->uid==uid) return(n);
-		mdl++;
-	}
-	
-	return(-1);
-}
-
-model_type* model_find_uid(int uid)
-{
-	int				n;
-	model_type		*mdl;
-
-	mdl=server.models;
-	
-	for (n=0;n!=server.count.model;n++) {
-		if (mdl->uid==uid) return(mdl);
-		mdl++;
-	}
-	
-	return(NULL);
-}
-
 model_type* model_find(char *name)
 {
 	int				n;
 	model_type		*mdl;
-
-	mdl=server.models;
 	
-	for (n=0;n!=server.count.model;n++) {
+	for (n=0;n!=max_model_list;n++) {
+		mdl=server.model_list.models[n];
+		if (mdl==NULL) continue;
+
 		if (strcasecmp(mdl->name,name)==0) return(mdl);
-		mdl++;
 	}
 	
 	return(NULL);
+}
+
+int model_find_index(char *name)
+{
+	int				n;
+	model_type		*mdl;
+
+	for (n=0;n!=max_model_list;n++) {
+		mdl=server.model_list.models[n];
+		if (mdl==NULL) continue;
+
+		if (strcasecmp(mdl->name,name)==0) return(n);
+	}
+	
+	return(-1);
 }
 
 /* =======================================================
@@ -107,47 +103,50 @@ model_type* model_find(char *name)
       
 ======================================================= */
 
-model_type* model_load_single(char *name)
+int model_load(char *name,bool force_opengl_textures)
 {
-	model_type		*mdl,*ptr;
+	int				n,idx;
+	bool			load_textures;
+	model_type		*mdl;
 	
 		// has model been already loaded?
 		// if so, return model and increment reference count
 	
-	mdl=model_find(name);
-	if (mdl!=NULL) {
-		mdl->reference_count++;
-		return(mdl);
+	idx=model_find_index(name);
+	if (idx!=-1) {
+		server.model_list.models[idx]->load.reference_count++;
+		return(idx);
 	}
 
-		// only allow a maximum number of models
+		// find empty spot
 
-	if (server.count.model>=max_model) return(NULL);
+	idx=-1;
 
-		// create memory for new model
-
-	ptr=(model_type*)malloc(sizeof(model_type)*(server.count.model+1));
-	if (ptr==NULL) return(NULL);
-
-	if (server.models!=NULL) {
-		memmove(ptr,server.models,(sizeof(model_type)*server.count.model));
-		free(server.models);
+	for (n=0;n!=max_model_list;n++) {
+		mdl=server.model_list.models[n];
+		if (mdl==NULL) {
+			idx=n;
+			break;
+		}
 	}
 
-	server.models=ptr;
+	if (idx==-1) return(-1);
 
-	mdl=&server.models[server.count.model];
-	server.count.model++;
+		// memory for model
+
+	mdl=(model_type*)malloc(sizeof(model_type));
+	if (mdl==NULL) return(-1);
 
 		// load model
 
-	model_setup(&setup.file_path_setup,setup.anisotropic_mode,setup.mipmap_mode,setup.texture_compression);
-	if (!model_open(mdl,name,TRUE)) {
-		server.count.model--;		// error loading, leave memory as is an fix next model load
-		return(NULL);
+	load_textures=((!app.dedicated_host) || (force_opengl_textures));
+		
+	if (!model_open(mdl,name,load_textures)) {
+		free(mdl);
+		return(-1);
 	}
 
-	gl_shader_attach_model(mdl);
+	if (!app.dedicated_host) gl_shader_attach_model(mdl);
 
 		// setup some animation indexes to avoid name lookups
 
@@ -155,23 +154,23 @@ model_type* model_load_single(char *name)
 
 		// start reference count at 1
 
-	mdl->reference_count=1;
+	mdl->load.reference_count=1;
+	mdl->load.preloaded=FALSE;
 
-		// new unique ID
-		
-	mdl->uid=server.uid.model;
-	server.uid.model++;
+		// put in model list
+
+	server.model_list.models[idx]=mdl;
 	
-	return(mdl);
+	return(idx);
 }
 
-void model_load_and_init(model_draw *draw)
+bool model_draw_load(model_draw *draw,char *item_type,char *item_name,bool force_opengl_textures,char *err_str)
 {
 	int					n;
-	char				err_str[256];
+	bool				ok;
 	model_type			*mdl;
-
-	draw->uid=-1;
+	
+	draw->model_idx=-1;
 	draw->center.x=draw->center.y=draw->center.z=0;
 	draw->size.x=draw->size.y=draw->size.z=0;
 
@@ -179,25 +178,28 @@ void model_load_and_init(model_draw *draw)
 	draw->script_halo_idx=0;
 	draw->script_light_idx=0;
 	
+	ok=TRUE;
 	mdl=NULL;
-	
+
 	if (draw->name[0]!=0x0) {
-		mdl=model_load_single(draw->name);
-		if (mdl!=NULL) {
-			draw->uid=mdl->uid;
+		draw->model_idx=model_load(draw->name,force_opengl_textures);
+		if (draw->model_idx!=-1) {
+			mdl=server.model_list.models[draw->model_idx];
 			model_get_size(mdl,&draw->size.x,&draw->size.y,&draw->size.z);
 			memmove(&draw->center,&mdl->center,sizeof(d3pnt));
 		}
 		else {
 			draw->on=FALSE;
-			draw->uid=-1;
-			sprintf(err_str,"Unable to load model named %s",draw->name);
-			console_add_error(err_str);
+			sprintf(err_str,"Unable to load model named %s for %s: %s",draw->name,item_type,item_name);
+			ok=FALSE;
 		}
 	}
 	else {
 		draw->on=FALSE;
 	}
+	
+		// setup flags telling which textures
+		// are used by which mesh
 	
 		// initialize draw memory
 		
@@ -213,6 +215,15 @@ void model_load_and_init(model_draw *draw)
 	draw->script_animation_idx=0;
 
 	model_fade_clear(draw);
+	model_rag_doll_clear(draw);
+
+		// create the VBO
+
+	if (!app.dedicated_host) {
+		if (draw->model_idx!=-1) view_create_model_vertex_object(draw);
+	}
+
+	return(ok);
 }
 
 /* =======================================================
@@ -221,69 +232,47 @@ void model_load_and_init(model_draw *draw)
       
 ======================================================= */
 
-void models_dispose(model_draw *draw)
+void model_dispose(int idx)
 {
-	int					idx;
-	model_type			*mdl,*ptr;
-
-		// was model loaded?
-		
-	if (draw->uid==-1) return;
+	model_type			*mdl;
 
 		// find model
-
-	idx=model_find_uid_index(draw->uid);
-	if (idx==-1) return;
-	
-	mdl=&server.models[idx];
-	
-		// clear draw memory
 		
-	model_draw_setup_shutdown(mdl,&draw->setup);
+	mdl=server.model_list.models[idx];
 
 		// decrement reference count
 
-	mdl->reference_count--;
-	if (mdl->reference_count>0) return;
+	mdl->load.reference_count--;
+	if (mdl->load.reference_count>0) return;
 
 		// dispose model
 
 	model_close(mdl);
 
-		// is the list completely empty?
+		// free the data and fix
+		// the list
 
-	if (server.count.model==1) {
-		free(server.models);
-		server.models=NULL;
-		server.count.model=0;
-		return;
-	}
+	free(mdl);
+	server.model_list.models[idx]=NULL;
+}
 
-		// if for some reason we can't create new
-		// memory, just shuffle the list and wait
-		// until next time
+void model_draw_dispose(model_draw *draw)
+{
+		// find model
+		
+	if (draw->model_idx==-1) return;
 
-	ptr=(model_type*)malloc(sizeof(model_type)*(server.count.model-1));
+		// dispose VBO
 
-	if (ptr==NULL) {
-		if (idx<(server.count.model-1)) {
-			memmove(&server.models[idx],&server.models[idx+1],(sizeof(model_type)*((server.count.model-idx)-1)));
-		}
-	}
-	else {
-
-		if (idx>0) {
-			memmove(ptr,server.models,(sizeof(model_type)*idx));
-		}
-		if (idx<(server.count.model-1)) {
-			memmove(&ptr[idx],&server.models[idx+1],(sizeof(model_type)*((server.count.model-idx)-1)));
-		}
-
-		free(server.models);
-		server.models=ptr;
-	}
+	if (!app.dedicated_host) view_dispose_model_vertex_object(draw);
 	
-	server.count.model--;
+		// clear draw memory
+		
+	model_draw_setup_shutdown(server.model_list.models[draw->model_idx],&draw->setup);
+
+		// dispose model
+
+	model_dispose(draw->model_idx);
 }
 
 /* =======================================================
@@ -292,53 +281,127 @@ void models_dispose(model_draw *draw)
       
 ======================================================= */
 
-void models_reset_uid_single(model_draw *draw)
+void model_reset_single(model_draw *draw)
 {
-	model_type			*mdl;
+	draw->model_idx=model_find_index(draw->name);
 
-	mdl=model_find(draw->name);
-	if (mdl==NULL) {
-		draw->on=FALSE;
-		return;
+		// if model is loaded, update
+		// reference count
+
+	if (draw->model_idx!=-1) {
+		server.model_list.models[draw->model_idx]->load.reference_count++;
 	}
 
-	draw->uid=mdl->uid;
+		// try to load it
+
+	else {
+		draw->model_idx=model_load(draw->name,FALSE);
+		if (draw->model_idx==-1) draw->on=FALSE;
+	}
+
+		// and create the draw setup memory
+
+	if (draw->model_idx!=-1) {
+		model_draw_setup_initialize(server.model_list.models[draw->model_idx],&draw->setup,TRUE);
+	}
 }
 
-void models_reset_uid(void)
+void models_reset(void)
 {
-	int					i;
+	int					n,k,i;
 	obj_type			*obj;
 	weapon_type			*weap;
 	proj_setup_type		*proj_setup;
 	proj_type			*proj;
-	
-	obj=server.objs;
-	
-	for (i=0;i!=server.count.obj;i++) {
-		models_reset_uid_single(&obj->draw);
-		obj++;
+	model_type			*mdl;
+
+		// will need to reset all model
+		// reference counts, we don't know
+		// where they are left off after load
+		
+		// special check for preloaded models
+		// so we don't end up losing their
+		// one preload count
+
+	for (n=0;n!=max_model_list;n++) {
+		mdl=server.model_list.models[n];
+		if (mdl!=NULL) {
+			mdl->load.reference_count=0;
+			if (mdl->load.preloaded) mdl->load.reference_count++;
+		}
 	}
 
-	weap=server.weapons;
+		// fix model indexes
 	
-	for (i=0;i!=server.count.weapon;i++) {
-		models_reset_uid_single(&weap->draw);
-		weap++;
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
+		
+		model_reset_single(&obj->draw);
+	
+		for (k=0;k!=max_weap_list;k++) {
+			weap=obj->weap_list.weaps[k];
+			if (weap==NULL) continue;
+
+			model_reset_single(&weap->draw);
+			if (weap->dual.on) model_reset_single(&weap->draw_dual);
+		
+			for (i=0;i!=max_proj_setup_list;i++) {
+				proj_setup=weap->proj_setup_list.proj_setups[i];
+				if (proj_setup==NULL) continue;
+				
+				model_reset_single(&proj_setup->draw);
+			}
+		}
 	}
 
-	proj_setup=server.proj_setups;
-	
-    for (i=0;i!=server.count.proj_setup;i++) {
-		models_reset_uid_single(&proj_setup->draw);
-		proj_setup++;
+    for (n=0;n!=max_proj_list;n++) {
+		proj=server.proj_list.projs[n];
+		if (!proj->on) continue;
+		
+		model_reset_single(&proj->draw);
 	}
 
-	proj=server.projs;
-	
-    for (i=0;i!=server.count.proj;i++) {
-		models_reset_uid_single(&proj->draw);
-		proj++;
+		// now remove all models with zero
+		// reference count, our loaded file
+		// isn't using them
+
+	for (n=0;n!=max_model_list;n++) {
+		mdl=server.model_list.models[n];
+		if (mdl!=NULL) {
+			if (mdl->load.reference_count<=0) model_dispose(n);
+		}
 	}
 }
+
+/* =======================================================
+
+      Model PreLoading
+      
+======================================================= */
+
+void model_preload_start(void)
+{
+	int			n,idx;
+	
+	for (n=0;n!=max_preload_model;n++) {
+		if (iface.preload_model.names[n][0]==0x0) continue;
+		
+		idx=model_load(iface.preload_model.names[n],FALSE);
+		if (idx!=-1) server.model_list.models[idx]->load.preloaded=TRUE;
+	}
+}
+
+void model_preload_free(void)
+{
+	int			n,idx;
+	
+	for (n=0;n!=max_preload_model;n++) {
+		if (iface.preload_model.names[n][0]==0x0) continue;
+		
+		idx=model_find_index(iface.preload_model.names[n]);
+		if (idx!=-1) model_dispose(idx);
+	}
+}
+
 

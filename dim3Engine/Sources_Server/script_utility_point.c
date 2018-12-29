@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -31,25 +31,24 @@ and can be sold or given away.
 
 #include "scripts.h"
 
+extern iface_type		iface;
 extern js_type			js;
 
-extern void view_script_transform_3D_to_2D(int x,int y,int z,int *x2,int *y2);
+extern void view_script_transform_3D_to_2D(d3pnt *pnt);
 
-JSBool js_utility_point_equal_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_utility_point_angle_to_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_utility_point_distance_to_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_utility_point_transform_3D_to_2D_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
+JSValueRef js_utility_point_equal_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_utility_point_angle_to_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_utility_point_distance_to_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_utility_point_transform_3D_to_2D_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
 
-JSClass			utility_point_class={"utility_point_class",0,
-							script_add_property,JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,
-							JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub,JS_FinalizeStub};
+JSStaticFunction	utility_point_functions[]={
+							{"equal",				js_utility_point_equal_func,				kJSPropertyAttributeDontDelete},
+							{"angleTo",				js_utility_point_angle_to_func,				kJSPropertyAttributeDontDelete},
+							{"distanceTo",			js_utility_point_distance_to_func,			kJSPropertyAttributeDontDelete},
+							{"transform3Dto2D",		js_utility_point_transform_3D_to_2D_func,	kJSPropertyAttributeDontDelete},
+							{0,0,0}};
 
-script_js_function	utility_point_functions[]={
-							{"equal",				js_utility_point_equal_func,				7},
-							{"angleTo",				js_utility_point_angle_to_func,				4},
-							{"distanceTo",			js_utility_point_distance_to_func,			6},
-							{"transform3Dto2D",		js_utility_point_transform_3D_to_2D_func,	3},
-							{0}};
+JSClassRef			utility_point_class;
 
 /* =======================================================
 
@@ -57,9 +56,19 @@ script_js_function	utility_point_functions[]={
       
 ======================================================= */
 
-void script_add_utility_point_object(JSObject *parent_obj)
+void script_init_utility_point_object(void)
 {
-	script_create_child_object(parent_obj,"point",&utility_point_class,NULL,utility_point_functions);
+	utility_point_class=script_create_class("utility_point_class",NULL,utility_point_functions);
+}
+
+void script_free_utility_point_object(void)
+{
+	script_free_class(utility_point_class);
+}
+
+JSObjectRef script_add_utility_point_object(JSContextRef cx,JSObjectRef parent_obj,int script_idx)
+{
+	return(script_create_child_object(cx,parent_obj,utility_point_class,"point",script_idx));
 }
 
 /* =======================================================
@@ -68,74 +77,58 @@ void script_add_utility_point_object(JSObject *parent_obj)
       
 ======================================================= */
 
-JSBool js_utility_point_equal_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_utility_point_equal_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
-	int				x,z,y,to_x,to_z,to_y,slop;
+	int				slop;
+	d3pnt			pnt,to_pnt;
 
-	x=JSVAL_TO_INT(argv[0]);
-	z=JSVAL_TO_INT(argv[1]);
-	y=JSVAL_TO_INT(argv[2]);
-	to_x=JSVAL_TO_INT(argv[3]);
-	to_z=JSVAL_TO_INT(argv[4]);
-	to_y=JSVAL_TO_INT(argv[5]);
-	slop=JSVAL_TO_INT(argv[6]);
-	
-	if ((x<(to_x-slop)) || (x>(to_x+slop)) || (z<(to_z-slop)) || (z>(to_z+slop)) || (y<(to_y-slop)) || (y>(to_y+slop))) {
-		*rval=JSVAL_FALSE;
-	}
-	else {
-		*rval=JSVAL_TRUE;
-	}
-	
-	return(JS_TRUE);
+	if (!script_check_param_count(cx,func,argc,3,exception)) return(script_null_to_value(cx));
+
+	script_value_to_point(cx,argv[0],&pnt);
+	script_value_to_point(cx,argv[1],&to_pnt);
+	slop=script_value_to_int(cx,argv[2]);
+
+	return(script_bool_to_value(cx,!((pnt.x<(to_pnt.x-slop)) || (pnt.x>(to_pnt.x+slop)) || (pnt.y<(to_pnt.y-slop)) || (pnt.y>(to_pnt.y+slop)) || (pnt.z<(to_pnt.z-slop)) || (pnt.z>(to_pnt.z+slop)))));
 }
 
-JSBool js_utility_point_angle_to_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_utility_point_angle_to_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
-	int				x,z,to_x,to_z;
 	float			ang;
+	d3pnt			pnt,to_pnt;
 	
-	x=JSVAL_TO_INT(argv[0]);
-	z=JSVAL_TO_INT(argv[1]);
-	to_x=JSVAL_TO_INT(argv[2]);
-	to_z=JSVAL_TO_INT(argv[3]);
-	
-	ang=angle_find(x,z,to_x,to_z);
-    *rval=script_float_to_value(ang);
-	
-	return(JS_TRUE);
+	if (!script_check_param_count(cx,func,argc,2,exception)) return(script_null_to_value(cx));
+
+	script_value_to_2D_point(cx,argv[0],&pnt);
+	script_value_to_2D_point(cx,argv[1],&to_pnt);
+
+	ang=angle_find(pnt.x,pnt.z,to_pnt.x,to_pnt.z);
+	return(script_float_to_value(cx,ang));
 }
 
-JSBool js_utility_point_distance_to_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_utility_point_distance_to_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
-	int				dist,x,z,y,to_x,to_z,to_y;
+	int				dist;
+	d3pnt			pnt,to_pnt;
 	
-	x=JSVAL_TO_INT(argv[0]);
-	z=JSVAL_TO_INT(argv[1]);
-	y=JSVAL_TO_INT(argv[2]);
-	to_x=JSVAL_TO_INT(argv[3]);
-	to_z=JSVAL_TO_INT(argv[4]);
-	to_y=JSVAL_TO_INT(argv[5]);
+	if (!script_check_param_count(cx,func,argc,2,exception)) return(script_null_to_value(cx));
 
-	dist=distance_get(x,y,z,to_x,to_y,to_z);
-	*rval=INT_TO_JSVAL(dist);
-	
-	return(JS_TRUE);
+	script_value_to_point(cx,argv[0],&pnt);
+	script_value_to_point(cx,argv[1],&to_pnt);
+
+	dist=distance_get(pnt.x,pnt.y,pnt.z,to_pnt.x,to_pnt.y,to_pnt.z);
+	return(script_int_to_value(cx,dist));
 }
 
-JSBool js_utility_point_transform_3D_to_2D_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_utility_point_transform_3D_to_2D_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
-	int				x,z,y,x2,y2;
+	d3pnt			pnt;
 	
-	x=JSVAL_TO_INT(argv[0]);
-	z=JSVAL_TO_INT(argv[1]);
-	y=JSVAL_TO_INT(argv[2]);
-	
-	view_script_transform_3D_to_2D(x,y,z,&x2,&y2);
+	if (!script_check_param_count(cx,func,argc,1,exception)) return(script_null_to_value(cx));
 
-	*rval=script_point_to_value(x2,y2,z);
-	
-	return(JS_TRUE);
+	script_value_to_point(cx,argv[0],&pnt);
+	view_script_transform_3D_to_2D(&pnt);
+
+	return(script_point_to_value(cx,&pnt));
 }
 
 

@@ -2,10 +2,10 @@ import os, string
 
 env = Environment()
 env.Append(CCFLAGS = ['-Wall', '-W', '-Wno-unused-parameter'])
-env.Append(CPPPATH = ['/usr/include/js'])
+env.Append(CPPPATH = ['/usr/local/include/SDL2','/usr/include/webkitgtk-1.0','/usr/include/freetype2','/usr/include/webkitgtk-1.0/JavaScriptCore'])
 env.Append(CPPDEFINES = {'D3_PCH': 1})
 env.Append(LIBS = [
-    'SDL', 'GLEW', 'GL', 'GLU', 'X11', 'openal', 'js', 'png'])
+    'SDL2', 'GLEW', 'GL', 'GLU', 'X11', 'openal', 'webkitgtk-1.0', 'png', 'mpg123', 'fontconfig', 'freetype', 'libm', 'libz', 'libjavascriptcoregtk-1.0'])
 
 if ARGUMENTS.get('release', 0) == 0:
     env.Append(CCFLAGS = ['-g'])
@@ -15,13 +15,14 @@ else:
 Export('env')
 
 sources = []
-for root, directories, files in os.walk('.'):
-    for directory in directories:
-        if string.count(directory, 'Headers'):
-            env.Append(CPPPATH = [root + '/' + directory])
-    
-    for file in files:
-        if os.path.splitext(file)[1] == '.c':
-            sources += [root + '/' + file]
+for codepath in ['../dim3Common','../dim3BaseUtility','../dim3MapUtility','../dim3ModelUtility','../dim3Engine']:
+    for root, directories, files in os.walk(codepath):
+        for directory in directories:
+            if string.count(directory, 'Headers'):
+                env.Append(CPPPATH = [root + '/' + directory])
+        
+        for file in files:
+            if os.path.splitext(file)[1] == '.c':
+                sources += [root + '/' + file]
 
-env.Program('Dim3 Engine', sources)
+env.Program('dim3', sources)

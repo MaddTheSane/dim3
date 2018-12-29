@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,18 +29,14 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "weapons.h"
-#include "models.h"
-#include "physics.h"
-#include "consoles.h"
-#include "interfaces.h"
-#include "video.h"
 
 extern map_type				map;
 extern camera_type			camera;
 extern view_type			view;
 extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
 
 /* =======================================================
@@ -49,9 +45,9 @@ extern setup_type			setup;
       
 ======================================================= */
 
-void crosshair_show_alt(int tick,obj_type *obj)
+void crosshair_show_alt(obj_type *obj)
 {
-	obj->crosshair_draw.alt_tick=tick+200;
+	obj->crosshair_draw.alt_tick=game_time_get()+200;
 }
 
 /* =======================================================
@@ -60,10 +56,9 @@ void crosshair_show_alt(int tick,obj_type *obj)
       
 ======================================================= */
 
-bool crosshair_get_location(int tick,obj_type *obj,weapon_type *weap,int *kx,int *ky,int *hit_obj_uid,int *dist)
+bool crosshair_get_location(obj_type *obj,weapon_type *weap,int *kx,int *ky,int *hit_obj_idx,int *dist)
 {
-	int						tx,ty,tz;
-	d3pnt					fpt,hpt;
+	d3pnt					fpt,win_pnt;
 	d3ang					ang;
 	ray_trace_contact_type	contact;
 
@@ -73,12 +68,12 @@ bool crosshair_get_location(int tick,obj_type *obj,weapon_type *weap,int *kx,int
 
 		case ct_bone_tracking:
 		case ct_bone_tracking_resizing:
-			if (!weapon_get_projectile_position_angle_weapon_model(tick,obj,weap,&fpt,&ang,NULL)) return(FALSE);
+			if (!weapon_get_projectile_position_angle_weapon_model(obj,weap,&fpt,&ang,NULL)) return(FALSE);
 			break;
 
 		case ct_barrel_tracking:
 		case ct_barrel_tracking_resizing:
-			if (!weapon_get_projectile_position_angle_weapon_barrel(tick,obj,weap,&fpt,&ang,NULL)) return(FALSE);
+			if (!weapon_get_projectile_position_angle_weapon_barrel(obj,weap,&fpt,&ang,NULL)) return(FALSE);
 			break;
 
 		default:
@@ -89,38 +84,33 @@ bool crosshair_get_location(int tick,obj_type *obj,weapon_type *weap,int *kx,int
 		// trace to find any clicking or hit objects
 
 	contact.obj.on=TRUE;
-	contact.obj.ignore_uid=obj->uid;
+	contact.obj.ignore_idx=obj->idx;
 	contact.proj.on=FALSE;
 
-	contact.hit_mode=poly_ray_trace_hit_mode_all;
 	contact.origin=poly_ray_trace_origin_object;
 
-	ray_trace_map_by_angle(&fpt,&ang,(map_enlarge*400),&hpt,&contact);
+	ray_trace_map_by_angle(&fpt,&ang,crosshair_max_ray_trace_distance,&contact);
 
-	if (hit_obj_uid!=NULL) *hit_obj_uid=contact.obj.uid;
+	if (hit_obj_idx!=NULL) *hit_obj_idx=contact.obj.idx;
 	
 		// get the 2D point
 		
 	if (weap->crosshair.type==ct_center) {
-		*kx=setup.screen.x_sz/2;
-		*ky=setup.screen.y_sz/2;
+		*kx=view.screen.x_sz/2;
+		*ky=view.screen.y_sz/2;
 		if (dist!=NULL) *dist=0;
 	}
 	else {
-		gl_3D_view();
-		gl_3D_rotate(&view.render->camera.pnt,&view.render->camera.ang);
-		gl_setup_project();
-		
-		tx=hpt.x;
-		ty=hpt.y;
-		tz=hpt.z;
-		
-		gl_project_point(&tx,&ty,&tz);
-		
-		*kx=tx;
-		*ky=setup.screen.y_sz-ty;
-		
-		if (dist!=NULL) *dist=distance_get(view.render->camera.pnt.x,view.render->camera.pnt.y,view.render->camera.pnt.z,hpt.x,hpt.y,hpt.z);
+		win_pnt.x=contact.hpt.x;
+		win_pnt.y=contact.hpt.y;
+		win_pnt.z=contact.hpt.z;
+
+		gl_project_point(&win_pnt);
+
+		*kx=win_pnt.x;
+		*ky=view.screen.y_sz-win_pnt.y;
+
+		if (dist!=NULL) *dist=distance_get(view.render->camera.pnt.x,view.render->camera.pnt.y,view.render->camera.pnt.z,contact.hpt.x,contact.hpt.y,contact.hpt.z);
 	}
 	
 	return(TRUE);
@@ -132,7 +122,7 @@ bool crosshair_get_location(int tick,obj_type *obj,weapon_type *weap,int *kx,int
       
 ======================================================= */
 
-void crosshair_setup_click(int tick,obj_type *obj)
+void crosshair_setup_click(obj_type *obj)
 {
 	unsigned long		idx;
 	obj_crosshair_draw	*crosshair_draw;
@@ -142,20 +132,20 @@ void crosshair_setup_click(int tick,obj_type *obj)
 	crosshair_draw=&obj->crosshair_draw;
 	if (!crosshair_draw->on) {
 		crosshair_draw->on=TRUE;
-		crosshair_draw->x=setup.screen.x_sz>>1;
-		crosshair_draw->y=setup.screen.y_sz-(setup.screen.y_sz>>1);				// 2D view has Y flipped
+		crosshair_draw->x=view.screen.x_sz>>1;
+		crosshair_draw->y=view.screen.y_sz-(view.screen.y_sz>>1);				// 2D view has Y flipped
 	}
 	
 		// static setup for click crosshair
 		
-	crosshair_draw->aim_obj_uid=-1;
-	crosshair_draw->sz=setup.screen.x_sz/10;
+	crosshair_draw->aim_obj_idx=-1;
+	crosshair_draw->sz=view.screen.x_sz/10;
 	crosshair_draw->alpha=1;
 	crosshair_draw->color.r=crosshair_draw->color.g=crosshair_draw->color.b=1;
 
 		// clicking down?
 
-	if (crosshair_draw->alt_tick>tick) {
+	if (crosshair_draw->alt_tick>game_time_get()) {
 		idx=obj->click.crosshair_down_idx;
 	}
 	else {
@@ -167,19 +157,19 @@ void crosshair_setup_click(int tick,obj_type *obj)
 		return;
 	}
 
-	crosshair_draw->gl_id=view_images_get_gl_id(server.crosshairs[idx].image_idx);
+	crosshair_draw->gl_id=view_images_get_gl_id(iface.crosshair_list.crosshairs[idx].image_idx);
 }
 
-void crosshair_setup_weapon(int tick,obj_type *obj,weapon_type *weap)
+void crosshair_setup_weapon(obj_type *obj,weapon_type *weap)
 {
-	int					x,y,sz,dist,obj_uid,
+	int					x,y,sz,dist,obj_idx,
 						item_count,weap_mode,move_tick,swap_tick;
 	float				alpha;
 	obj_crosshair_draw	*crosshair_draw;
 	
 	crosshair_draw=&obj->crosshair_draw;
 	crosshair_draw->on=FALSE;
-	crosshair_draw->aim_obj_uid=-1;
+	crosshair_draw->aim_obj_idx=-1;
 
 		// weapon displays a crosshair?
 	
@@ -190,10 +180,10 @@ void crosshair_setup_weapon(int tick,obj_type *obj,weapon_type *weap)
 	
 		// get crosshair location
 
-	if (!crosshair_get_location(tick,obj,weap,&x,&y,&obj_uid,&dist)) return;
+	if (!crosshair_get_location(obj,weap,&x,&y,&obj_idx,&dist)) return;
 	
 	crosshair_draw->on=TRUE;
-	crosshair_draw->aim_obj_uid=obj_uid;
+	crosshair_draw->aim_obj_idx=obj_idx;
 	
 	crosshair_draw->x=x;
 	crosshair_draw->y=y;
@@ -204,7 +194,7 @@ void crosshair_setup_weapon(int tick,obj_type *obj,weapon_type *weap)
 
 		case ct_bone_tracking:
 		case ct_barrel_tracking:
-			sz=setup.screen.x_sz>>5;
+			sz=view.screen.x_sz>>5;
 			break;
 
 		case ct_bone_tracking_resizing:
@@ -233,7 +223,7 @@ void crosshair_setup_weapon(int tick,obj_type *obj,weapon_type *weap)
 	
 	alpha=1;
 	
-	move_tick=tick;
+	move_tick=game_time_get();
 	
     if (weap_mode==wm_lower) {
         move_tick-=swap_tick;
@@ -248,7 +238,7 @@ void crosshair_setup_weapon(int tick,obj_type *obj,weapon_type *weap)
 	
 		// regular weapon crosshair
 		
-	crosshair_draw->gl_id=view_images_get_gl_id(server.crosshairs[weap->crosshair.fire_idx].image_idx);
+	crosshair_draw->gl_id=view_images_get_gl_id(iface.crosshair_list.crosshairs[weap->crosshair.fire_idx].image_idx);
 	
 		// change color if picking up an item or empty
 
@@ -266,19 +256,19 @@ void crosshair_setup_weapon(int tick,obj_type *obj,weapon_type *weap)
 	}
 }
 
-void crosshair_setup(int tick,obj_type *obj,weapon_type *weap)
+void crosshair_setup(obj_type *obj,weapon_type *weap)
 {
 		// setup crosshair
 		
-	crosshair_setup_weapon(tick,obj,weap);
+	crosshair_setup_weapon(obj,weap);
 	
 		// if there an object to click?
 		
-	if (obj->click.current_click_obj_uid==-1) return;
+	if (obj->click.current_click_obj_idx==-1) return;
 	
 		// change to click crosshair
 		
-	crosshair_setup_click(tick,obj);
+	crosshair_setup_click(obj);
 }
 
 /* =======================================================
@@ -293,22 +283,20 @@ void crosshair_draw(obj_type *obj,weapon_type *weap)
 	obj_crosshair_draw	*crosshair_draw;
 	
 		// is scope on?
-		
+
 	if ((weap->zoom.on) && (weap->zoom.mode!=zoom_mode_off)) return;
 
 		// can't use centered crosshairs when not in FPP
 
-	if ((weap->crosshair.type==ct_center) && (camera.mode!=cv_fpp)) return;
+	if ((weap->crosshair.type==ct_center) && (map.camera.camera_mode!=cv_fpp)) return;
 	
 		// is crosshair on?
-	
+
 	crosshair_draw=&obj->crosshair_draw;
 	if (!crosshair_draw->on) return;
 	
 		// draw the crosshair
 		
-	gl_2D_view_screen();
-	
 	half_sz=crosshair_draw->sz>>1;
 	
 	lft=crosshair_draw->x-half_sz;
@@ -316,19 +304,7 @@ void crosshair_draw(obj_type *obj,weapon_type *weap)
 	rgt=lft+crosshair_draw->sz;
 	bot=top+crosshair_draw->sz;
 	
-	gl_texture_simple_start();
-
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
-	
-	glDisable(GL_DEPTH_TEST);
-
-	gl_texture_simple_set(crosshair_draw->gl_id,TRUE,crosshair_draw->color.r,crosshair_draw->color.g,crosshair_draw->color.b,crosshair_draw->alpha);
-	view_draw_next_vertex_object_2D_texture_quad(lft,rgt,top,bot);
-	gl_texture_simple_end();
+	view_primitive_2D_texture_quad(crosshair_draw->gl_id,&crosshair_draw->color,1.0f,lft,rgt,top,bot,0.0f,1.0f,0.0f,1.0f,TRUE);
 }
 
 

@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,294 +29,132 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "remotes.h"
-#include "weapons.h"
-#include "projectiles.h"
-#include "models.h"
-#include "lights.h"
-#include "effects.h"
-#include "cameras.h"
-#include "consoles.h"
-#include "interfaces.h"
-#include "video.h"
 
 extern map_type				map;
 extern camera_type			camera;
 extern view_type			view;
 extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
 
-extern void particle_draw_position(effect_type *effect,int count,int *x,int *y,int *z);
-extern void ring_draw_position(effect_type *effect,int count,int *x,int *y,int *z);
-extern bool fog_solid_on(void);
-extern bool shadow_get_volume_mesh(map_mesh_type *mesh,int *px,int *py,int *pz);
-extern bool shadow_get_volume_model(model_type *mdl,model_draw *draw,int *px,int *py,int *pz);
+float						gl_proj_matrix[16],gl_model_view_matrix[16],
+							view_cull_frustum[6][4];
 
 /* =======================================================
 
-      Bounding Boxes in View
+      Frustum/Bound Box Clipping
       
 ======================================================= */
 
-bool complex_boundbox_inview(int *cbx,int *cby,int *cbz)
+void view_cull_setup_frustum_clipping_planes(void)
 {
-	int			n,
-				px[14],py[14],pz[14];
-	bool		hit,lft,rgt,top,bot;
+	int			n;
+	float		f,clip[16];
 
-		// add midpoints of faces to check
+		// combine the matrixes
+
+	clip[0]=(gl_model_view_matrix[0]*gl_proj_matrix[0])+(gl_model_view_matrix[1]*gl_proj_matrix[4])+(gl_model_view_matrix[2]*gl_proj_matrix[8])+(gl_model_view_matrix[3]*gl_proj_matrix[12]);
+	clip[1]=(gl_model_view_matrix[0]*gl_proj_matrix[1])+(gl_model_view_matrix[1]*gl_proj_matrix[5])+(gl_model_view_matrix[2]*gl_proj_matrix[9])+(gl_model_view_matrix[3]*gl_proj_matrix[13]);
+	clip[2]=(gl_model_view_matrix[0]*gl_proj_matrix[2])+(gl_model_view_matrix[1]*gl_proj_matrix[6])+(gl_model_view_matrix[2]*gl_proj_matrix[10])+(gl_model_view_matrix[3]*gl_proj_matrix[14]);
+	clip[3]=(gl_model_view_matrix[0]*gl_proj_matrix[3])+(gl_model_view_matrix[1]*gl_proj_matrix[7])+(gl_model_view_matrix[2]*gl_proj_matrix[11])+(gl_model_view_matrix[3]*gl_proj_matrix[15]);
+
+	clip[4]=(gl_model_view_matrix[4]*gl_proj_matrix[0])+(gl_model_view_matrix[5]*gl_proj_matrix[4])+(gl_model_view_matrix[6]*gl_proj_matrix[8])+(gl_model_view_matrix[7]*gl_proj_matrix[12]);
+	clip[5]=(gl_model_view_matrix[4]*gl_proj_matrix[1])+(gl_model_view_matrix[5]*gl_proj_matrix[5])+(gl_model_view_matrix[6]*gl_proj_matrix[9])+(gl_model_view_matrix[7]*gl_proj_matrix[13]);
+	clip[6]=(gl_model_view_matrix[4]*gl_proj_matrix[2])+(gl_model_view_matrix[5]*gl_proj_matrix[6])+(gl_model_view_matrix[6]*gl_proj_matrix[10])+(gl_model_view_matrix[7]*gl_proj_matrix[14]);
+	clip[7]=(gl_model_view_matrix[4]*gl_proj_matrix[3])+(gl_model_view_matrix[5]*gl_proj_matrix[7])+(gl_model_view_matrix[6]*gl_proj_matrix[11])+(gl_model_view_matrix[7]*gl_proj_matrix[15]);
+
+	clip[8]=(gl_model_view_matrix[8]*gl_proj_matrix[0])+(gl_model_view_matrix[9]*gl_proj_matrix[4])+(gl_model_view_matrix[10]*gl_proj_matrix[8])+(gl_model_view_matrix[11]*gl_proj_matrix[12]);
+	clip[9]=(gl_model_view_matrix[8]*gl_proj_matrix[1])+(gl_model_view_matrix[9]*gl_proj_matrix[5])+(gl_model_view_matrix[10]*gl_proj_matrix[9])+(gl_model_view_matrix[11]*gl_proj_matrix[13]);
+	clip[10]=(gl_model_view_matrix[8]*gl_proj_matrix[2])+(gl_model_view_matrix[9]*gl_proj_matrix[6])+(gl_model_view_matrix[10]*gl_proj_matrix[10])+(gl_model_view_matrix[11]*gl_proj_matrix[14]);
+	clip[11]=(gl_model_view_matrix[8]*gl_proj_matrix[3])+(gl_model_view_matrix[9]*gl_proj_matrix[7])+(gl_model_view_matrix[10]*gl_proj_matrix[11])+(gl_model_view_matrix[11]*gl_proj_matrix[15]);
+
+	clip[12]=(gl_model_view_matrix[12]*gl_proj_matrix[0])+(gl_model_view_matrix[13]*gl_proj_matrix[4])+(gl_model_view_matrix[14]*gl_proj_matrix[8])+(gl_model_view_matrix[15]*gl_proj_matrix[12]);
+	clip[13]=(gl_model_view_matrix[12]*gl_proj_matrix[1])+(gl_model_view_matrix[13]*gl_proj_matrix[5])+(gl_model_view_matrix[14]*gl_proj_matrix[9])+(gl_model_view_matrix[15]*gl_proj_matrix[13]);
+	clip[14]=(gl_model_view_matrix[12]*gl_proj_matrix[2])+(gl_model_view_matrix[13]*gl_proj_matrix[6])+(gl_model_view_matrix[14]*gl_proj_matrix[10])+(gl_model_view_matrix[15]*gl_proj_matrix[14]);
+	clip[15]=(gl_model_view_matrix[12]*gl_proj_matrix[3])+(gl_model_view_matrix[13]*gl_proj_matrix[7])+(gl_model_view_matrix[14]*gl_proj_matrix[11])+(gl_model_view_matrix[15]*gl_proj_matrix[15]);
+
+		// left plane
 		
-	memmove(px,cbx,(sizeof(int)*8));
-	memmove(py,cby,(sizeof(int)*8));
-	memmove(pz,cbz,(sizeof(int)*8));
-	
-	px[8]=(px[0]+px[1]+px[2]+px[3])>>2;
-	py[8]=(py[0]+py[1]+py[2]+py[3])>>2;
-	pz[8]=(pz[0]+pz[1]+pz[2]+pz[3])>>2;
+	view_cull_frustum[0][0]=clip[3]+clip[0];
+	view_cull_frustum[0][1]=clip[7]+clip[4];
+	view_cull_frustum[0][2]=clip[11]+clip[8];
+	view_cull_frustum[0][3]=clip[15]+clip[12];
 
-	px[9]=(px[0]+px[1]+px[5]+px[4])>>2;
-	py[9]=(py[0]+py[1]+py[5]+py[4])>>2;
-	pz[9]=(pz[0]+pz[1]+pz[5]+pz[4])>>2;
-
-	px[10]=(px[1]+px[2]+px[6]+px[5])>>2;
-	py[10]=(py[1]+py[2]+py[6]+py[5])>>2;
-	pz[10]=(pz[1]+pz[2]+pz[6]+pz[5])>>2;
-
-	px[11]=(px[3]+px[2]+px[6]+px[7])>>2;
-	py[11]=(py[3]+py[2]+py[6]+py[7])>>2;
-	pz[11]=(pz[3]+pz[2]+pz[6]+pz[7])>>2;
-
-	px[12]=(px[0]+px[3]+px[7]+px[4])>>2;
-	py[12]=(py[0]+py[3]+py[7]+py[4])>>2;
-	pz[12]=(pz[0]+pz[3]+pz[7]+pz[4])>>2;
-
-	px[13]=(px[4]+px[5]+px[6]+px[7])>>2;
-	py[13]=(py[4]+py[5]+py[6]+py[7])>>2;
-	pz[13]=(pz[4]+pz[5]+pz[6]+pz[7])>>2;
-
-		// check if points are behind z
+		// right plane
 		
-	hit=FALSE;
-	
-	for (n=0;n!=14;n++) {
-		if (gl_project_in_view_z(px[n],py[n],pz[n])) {
-			hit=TRUE;
-			break;
-		}
-	}
-	
-	if (!hit) return(FALSE);
+	view_cull_frustum[1][0]=clip[3]-clip[0];
+	view_cull_frustum[1][1]=clip[7]-clip[4];
+	view_cull_frustum[1][2]=clip[11]-clip[8];
+	view_cull_frustum[1][3]=clip[15]-clip[12];
+
+		// top plane
 		
-		// project to screen
+	view_cull_frustum[2][0]=clip[3]-clip[1];
+	view_cull_frustum[2][1]=clip[7]-clip[5];
+	view_cull_frustum[2][2]=clip[11]-clip[9];
+	view_cull_frustum[2][3]=clip[15]-clip[13];
 
-	gl_project_poly(14,px,py,pz);
-	
-		// off screen?
-
-	lft=rgt=top=bot=TRUE;
-
-	for (n=0;n!=14;n++) {
-		lft=lft&&(px[n]<0);
-		rgt=rgt&&(px[n]>=setup.screen.x_sz);
-		top=top&&(py[n]<0);
-		bot=bot&&(py[n]>=setup.screen.y_sz);
-	}
-
-	return(!(lft||rgt||top||bot));
-}
-
-bool boundbox_inview(int x,int z,int ex,int ez,int ty,int by)
-{
-	int				px[8],py[8],pz[8];
-	
-	px[0]=px[3]=px[4]=px[7]=x;
-	px[1]=px[2]=px[5]=px[6]=ex;
-
-	pz[0]=pz[1]=pz[4]=pz[5]=z;
-	pz[2]=pz[3]=pz[6]=pz[7]=ez;
-
-	py[0]=py[1]=py[2]=py[3]=ty;
-	py[4]=py[5]=py[6]=py[7]=by;
-	
-	return(complex_boundbox_inview(px,py,pz));
-}
-
-/* =======================================================
-
-      Pieces in View
-      
-======================================================= */
-
-bool light_inview(d3pnt *pnt,int intensity)
-{
-	int			x,z,ex,ez,ty,by;
-
-	x=pnt->x-intensity;
-	ex=pnt->x+intensity;
-	z=pnt->z-intensity;
-	ez=pnt->z+intensity;
-	ty=pnt->y-intensity;
-	by=pnt->y+intensity;
-
-	return(boundbox_inview(x,z,ex,ez,ty,by));
-}
-
-bool mesh_inview(map_mesh_type *mesh)
-{
-	int			n,nvertex,x,y,z;
-	d3pnt		*pt;
-	bool		lft,rgt,top,bot;
-
-	nvertex=mesh->nvertex;
-	pt=mesh->vertexes;
-
-	lft=rgt=top=bot=TRUE;
-
-	for (n=0;n!=nvertex;n++) {
-		x=pt->x;
-		y=pt->y;
-		z=pt->z;
-
-		gl_project_point(&x,&y,&z);
-		if (z>0) {
-			pt++;
-			continue;
-		}
-
-		lft=lft&&(x<0);
-		rgt=rgt&&(x>=setup.screen.x_sz);
-		top=top&&(y<0);
-		bot=bot&&(y>=setup.screen.y_sz);
+		// bottom plane
 		
-		pt++;
-	}
+	view_cull_frustum[3][0]=clip[3]+clip[1];
+	view_cull_frustum[3][1]=clip[7]+clip[5];
+	view_cull_frustum[3][2]=clip[11]+clip[9];
+	view_cull_frustum[3][3]=clip[15]+clip[13];
 
-	return(!(lft||rgt||top||bot));
-}
-
-bool mesh_shadow_inview(map_mesh_type *mesh)
-{
-	int				px[8],py[8],pz[8];
-
-	if (!shadow_get_volume_mesh(mesh,px,py,pz)) return(FALSE);
-	return(complex_boundbox_inview(px,py,pz));
-}
-
-bool model_inview(model_draw *draw)
-{
-	int				px[8],py[8],pz[8];
-	model_type		*mdl;
-
-	if ((draw->uid==-1) || (!draw->on)) return(FALSE);
-	
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return(FALSE);
+		// near plane
 		
-	model_get_view_complex_bounding_box(mdl,&draw->pnt,&draw->setup.ang,px,py,pz);
-	return(complex_boundbox_inview(px,py,pz));
+	view_cull_frustum[4][0]=clip[3]+clip[2];
+	view_cull_frustum[4][1]=clip[7]+clip[6];
+	view_cull_frustum[4][2]=clip[11]+clip[10];
+	view_cull_frustum[4][3]=clip[15]+clip[14];
+
+		// far plane
+		
+	view_cull_frustum[5][0]=clip[3]-clip[2];
+	view_cull_frustum[5][1]=clip[7]-clip[6];
+	view_cull_frustum[5][2]=clip[11]-clip[10];
+	view_cull_frustum[5][3]=clip[15]-clip[14];
+	
+		// normalize the ABCD plane
+		
+	for (n=0;n!=6;n++) {
+		f=sqrtf((view_cull_frustum[n][0]*view_cull_frustum[n][0])+(view_cull_frustum[n][1]*view_cull_frustum[n][1])+(view_cull_frustum[n][2]*view_cull_frustum[n][2]));
+		view_cull_frustum[n][0]/=f;
+		view_cull_frustum[n][1]/=f;
+		view_cull_frustum[n][2]/=f;
+		view_cull_frustum[n][3]/=f;
+	}
 }
 
-bool model_shadow_inview(model_draw *draw)
+bool view_cull_boundbox_in_frustum(d3pnt *min,d3pnt *max)
 {
-	int				px[8],py[8],pz[8];
-	model_type		*mdl;
-
-	if ((draw->uid==-1) || (!draw->on)) return(FALSE);
+	int				n;
+	d3fpnt			f_min,f_max;
 	
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return(FALSE);
+	f_min.x=(float)min->x;
+	f_min.y=(float)min->y;
+	f_min.z=(float)min->z;
 
-	if (!shadow_get_volume_model(mdl,draw,px,py,pz)) return(FALSE);
-	return(complex_boundbox_inview(px,py,pz));
-}
+	f_max.x=(float)max->x;
+	f_max.y=(float)max->y;
+	f_max.z=(float)max->z;
 
-bool effect_inview(effect_type *effect,int count)
-{
-	int				x,y,z,lx,rx,tz,bz,ty,by,gravity_y,k,size;
-	particle_type	*particle;
-	
-	switch (effect->effecttype) {
+	for (n=0;n!=6;n++) {
+		if (((view_cull_frustum[n][0]*f_min.x)+(view_cull_frustum[n][1]*f_min.y)+(view_cull_frustum[n][2]*f_min.z)+view_cull_frustum[n][3])>0.0f) continue;
+		if (((view_cull_frustum[n][0]*f_max.x)+(view_cull_frustum[n][1]*f_min.y)+(view_cull_frustum[n][2]*f_min.z)+view_cull_frustum[n][3])>0.0f) continue;
+		if (((view_cull_frustum[n][0]*f_min.x)+(view_cull_frustum[n][1]*f_max.y)+(view_cull_frustum[n][2]*f_min.z)+view_cull_frustum[n][3])>0.0f) continue;
+		if (((view_cull_frustum[n][0]*f_max.x)+(view_cull_frustum[n][1]*f_max.y)+(view_cull_frustum[n][2]*f_min.z)+view_cull_frustum[n][3])>0.0f) continue;
+		if (((view_cull_frustum[n][0]*f_min.x)+(view_cull_frustum[n][1]*f_min.y)+(view_cull_frustum[n][2]*f_max.z)+view_cull_frustum[n][3])>0.0f) continue;
+		if (((view_cull_frustum[n][0]*f_max.x)+(view_cull_frustum[n][1]*f_min.y)+(view_cull_frustum[n][2]*f_max.z)+view_cull_frustum[n][3])>0.0f) continue;
+		if (((view_cull_frustum[n][0]*f_min.x)+(view_cull_frustum[n][1]*f_max.y)+(view_cull_frustum[n][2]*f_max.z)+view_cull_frustum[n][3])>0.0f) continue;
+		if (((view_cull_frustum[n][0]*f_max.x)+(view_cull_frustum[n][1]*f_max.y)+(view_cull_frustum[n][2]*f_max.z)+view_cull_frustum[n][3])>0.0f) continue;
 
-		case ef_particle:
-			particle_draw_position(effect,count,&x,&y,&z);
-
-			size=effect->size;
-			lx=x-(size>>1);
-			rx=lx+size;
-			tz=z-(size>>1);
-			bz=tz+size;
-			by=y;
-			ty=by-size;
-
-			particle=&server.particles[effect->data.particle.particle_idx];
-			gravity_y=(int)particle_get_gravity(particle,count);
-
-			if (gravity_y<0) {
-				ty+=gravity_y;
-			}
-			else {
-				by+=gravity_y;
-			}
-			break;
-
-		case ef_ring:
-			ring_draw_position(effect,count,&x,&y,&z);
-			size=effect->size;
-			lx=x-(size>>1);
-			rx=lx+size;
-			tz=z-(size>>1);
-			bz=tz+size;
-			by=y;
-			ty=by-size;
-			break;
-
-		case ef_lightning:
-			lx=effect->data.lightning.start_pnt.x;
-			rx=effect->data.lightning.end_pnt.x;
-			tz=effect->data.lightning.start_pnt.z;
-			bz=effect->data.lightning.end_pnt.z;
-			ty=effect->data.lightning.start_pnt.y;
-			by=effect->data.lightning.end_pnt.y;
-			break;
-
-		case ef_ray:
-			lx=effect->data.ray.start_pnt.x;
-			rx=effect->data.ray.end_pnt.x;
-			tz=effect->data.ray.start_pnt.z;
-			bz=effect->data.ray.end_pnt.z;
-			ty=effect->data.ray.start_pnt.y;
-			by=effect->data.ray.end_pnt.y;
-			break;
-
-		default:
-			size=effect->size;
-			lx=effect->pnt.x-(size>>1);
-			rx=lx+size;
-			tz=effect->pnt.z-(size>>1);
-			bz=tz+size;
-			by=effect->pnt.y;
-			ty=by-size;
-			break;
+		return(FALSE);
 	}
-	
-	if (lx>rx) {
-		k=lx;
-		lx=rx;
-		rx=k;
-	}
-	if (tz>bz) {
-		k=tz;
-		tz=bz;
-		bz=k;
-	}
-	if (ty>by) {
-		k=ty;
-		ty=by;
-		by=k;
-	}
-	
-	return(boundbox_inview(lx,tz,rx,bz,ty,by));
+
+	return(TRUE);
 }
 
 /* =======================================================
@@ -325,13 +163,239 @@ bool effect_inview(effect_type *effect,int count)
       
 ======================================================= */
 
-double distance_to_view_center(int x,int y,int z)
+int view_cull_distance_to_view_center(int x,int y,int z)
 {
-	double			dx,dz,dy;
+	float			fx,fy,fz;
 	
-	dx=(double)(x-view.render->camera.pnt.x);
-	dy=(double)(y-view.render->camera.pnt.y);
-	dz=(double)(z-view.render->camera.pnt.z);
-	return(sqrt((dx*dx)+(dy*dy)+(dz*dz)));
+	fx=(float)(x-view.render->camera.pnt.x);
+	fy=(float)(y-view.render->camera.pnt.y);
+	fz=(float)(z-view.render->camera.pnt.z);
+	return((int)sqrtf((fx*fx)+(fy*fy)+(fz*fz)));
+}
+
+/* =======================================================
+
+      Pieces in View
+      
+======================================================= */
+
+bool view_cull_mesh(map_mesh_type *mesh)
+{
+	int				obscure_dist;
+
+		// check obscure distance
+
+	if (!fog_solid_on()) {
+		obscure_dist=map.camera.plane.far_z-map.camera.plane.near_z;
+	}
+	else {
+		obscure_dist=(map.fog.outer_radius>>1)*3;
+	}
+
+	if (map_mesh_calculate_distance(mesh,&view.render->camera.pnt)>obscure_dist) return(FALSE);
+
+		// clip against view frustum
+	
+	return(view_cull_boundbox_in_frustum(&mesh->box.min,&mesh->box.max));
+}
+
+bool view_cull_liquid(map_liquid_type *liq)
+{
+	int				obscure_dist;
+	d3pnt			min,max;
+
+		// check obscure distance
+
+	if (!fog_solid_on()) {
+		obscure_dist=map.camera.plane.far_z-map.camera.plane.near_z;
+	}
+	else {
+		obscure_dist=(map.fog.outer_radius>>1)*3;
+	}
+		
+	if (map_liquid_calculate_distance(liq,&view.render->camera.pnt)>obscure_dist) return(FALSE);
+
+		// clip against view frustum
+		
+	min.x=liq->lft;
+	min.y=liq->y;
+	min.z=liq->top;
+	max.x=liq->rgt;
+	max.y=liq->y;
+	max.z=liq->bot;
+	
+	return(view_cull_boundbox_in_frustum(&min,&max));
+}
+
+bool view_cull_model(model_draw *draw)
+{
+	int				obscure_dist;
+	d3pnt			min,max;
+
+		// no model
+
+	if ((draw->model_idx==-1) || (!draw->on)) return(FALSE);
+
+		// check obscure distance
+
+	if (!fog_solid_on()) {
+		obscure_dist=map.camera.plane.far_z-map.camera.plane.near_z;
+	}
+	else {
+		obscure_dist=(map.fog.outer_radius>>1)*3;
+	}
+	
+	if (map.optimize.obscure_dist.model!=0) {
+		if (map.optimize.obscure_dist.model<obscure_dist) obscure_dist=map.optimize.obscure_dist.model;
+	}
+		
+	draw->draw_dist=view_cull_distance_to_view_center(draw->pnt.x,draw->pnt.y,draw->pnt.z);
+	if (draw->draw_dist>=((float)obscure_dist)) return(FALSE);
+
+		// check bounding box
+		
+	model_get_view_complex_bounding_volume(server.model_list.models[draw->model_idx],&draw->pnt,&draw->setup.ang,draw->resize,&min,&max);
+	return(view_cull_boundbox_in_frustum(&min,&max));
+}
+
+bool view_cull_model_shadow(model_draw *draw)
+{
+	int				obscure_dist,dist;
+	d3pnt			min,max;
+
+		// no model to draw
+
+	if ((draw->model_idx==-1) || (!draw->on)) return(FALSE);
+
+		// check obscure distance
+
+	if (!fog_solid_on()) {
+		obscure_dist=map.camera.plane.far_z-map.camera.plane.near_z;
+	}
+	else {
+		obscure_dist=(map.fog.outer_radius>>1)*3;
+	}
+	
+		// shadows can cull both by the shadow and model distance
+		
+	if (map.optimize.obscure_dist.shadow!=0) {
+		if (map.optimize.obscure_dist.shadow<obscure_dist) obscure_dist=map.optimize.obscure_dist.shadow;
+	}
+	if (map.optimize.obscure_dist.model!=0) {
+		if (map.optimize.obscure_dist.model<obscure_dist) obscure_dist=map.optimize.obscure_dist.model;
+	}
+		
+	dist=view_cull_distance_to_view_center(draw->pnt.x,draw->pnt.y,draw->pnt.z);
+	if (dist>=obscure_dist) return(FALSE);
+	
+		// get shadow volume
+
+	model_get_view_complex_bounding_volume(server.model_list.models[draw->model_idx],&draw->pnt,&draw->setup.ang,draw->resize,&min,&max);
+	shadow_get_volume(&draw->pnt,draw->size.y,&draw->shadow.light_pnt,draw->shadow.light_intensity,&min,&max);
+	return(view_cull_boundbox_in_frustum(&min,&max));
+}
+
+bool view_cull_effect(effect_type *effect,d3pnt *center_pnt)
+{
+	int					obscure_dist;
+	d3pnt				min,max;
+
+		// check obscure distance
+
+	if (!fog_solid_on()) {
+		obscure_dist=map.camera.plane.far_z-map.camera.plane.near_z;
+	}
+	else {
+		obscure_dist=(map.fog.outer_radius>>1)*3;
+	}
+
+	if (map.optimize.obscure_dist.effect!=0) {
+		if (map.optimize.obscure_dist.effect<obscure_dist) obscure_dist=map.optimize.obscure_dist.effect;
+	}
+		
+	if (view_cull_distance_to_view_center(effect->pnt.x,effect->pnt.y,effect->pnt.z)>obscure_dist) return(FALSE);
+	
+		// get box
+
+	effect_draw_get_bound_box(effect,&min,&max);
+	
+		// remember center position for
+		// distance calcs
+		
+	center_pnt->x=(min.x+max.x)>>1;
+	center_pnt->y=(min.y+max.y)>>1;
+	center_pnt->z=(min.z+max.z)>>1;
+	
+		// check bounds
+		
+	return(view_cull_boundbox_in_frustum(&min,&max));
+}
+
+bool view_cull_halo(d3pnt *pnt)
+{
+	int				obscure_dist;
+
+		// check obscure distance
+
+	if (!fog_solid_on()) {
+		obscure_dist=map.camera.plane.far_z-map.camera.plane.near_z;
+	}
+	else {
+		obscure_dist=(map.fog.outer_radius>>1)*3;
+	}
+
+	if (map.optimize.obscure_dist.effect!=0) {
+		if (map.optimize.obscure_dist.effect<obscure_dist) obscure_dist=map.optimize.obscure_dist.effect;
+	}
+		
+	return(view_cull_distance_to_view_center(pnt->x,pnt->y,pnt->z)<obscure_dist);
+}
+
+/* =======================================================
+
+      Mesh-Poly Culling
+      
+======================================================= */
+
+static inline bool view_cull_poly(map_mesh_type *mesh,map_mesh_poly_type *poly)
+{
+		// view culling
+
+	if (!view_cull_boundbox_in_frustum(&poly->box.min,&poly->box.max)) return(TRUE);
+
+		// check for never cull 
+		// by normal flags
+
+	if (mesh->flag.never_cull) return(FALSE);
+	if (poly->flag.never_cull) return(FALSE);
+	if (map.optimize.never_cull) return(FALSE);
+
+		// skip polys with away facing normals
+		// do dot product between normal and vector
+		// from poly mid-eye point
+
+	return(((poly->tangent_space.normal.x*(float)(poly->box.mid.x-view.render->camera.pnt.x))+(poly->tangent_space.normal.y*(float)(poly->box.mid.y-view.render->camera.pnt.y))+(poly->tangent_space.normal.z*(float)(poly->box.mid.z-view.render->camera.pnt.z)))>map.optimize.cull_angle);
+}
+
+void view_cull_draw_list_mesh_poly(void)
+{
+	int					n,k,mesh_idx;
+	map_mesh_type		*mesh;
+	map_mesh_poly_type	*poly;
+	
+	
+	for (n=0;n!=view.render->draw_list.count;n++) {
+		if (view.render->draw_list.items[n].type!=view_render_type_mesh) continue;
+	
+		mesh_idx=view.render->draw_list.items[n].idx;
+		mesh=&map.mesh.meshes[mesh_idx];
+		
+		poly=mesh->polys;
+		
+		for (k=0;k!=mesh->npoly;k++) {
+			poly->draw.culled[view.render->cull_idx]=view_cull_poly(mesh,poly);
+			poly++;
+		}
+	}
 }
 

@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,16 +29,13 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "weapons.h"
-#include "projectiles.h"
-#include "models.h"
-#include "effects.h"
-#include "video.h"
 
 extern map_type				map;
-extern server_type			server;
 extern view_type			view;
+extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
 
 /* =======================================================
@@ -47,20 +44,20 @@ extern setup_type			setup;
       
 ======================================================= */
 
-void ring_draw_position(effect_type *effect,int count,int *x,int *y,int *z)
+void ring_draw_position(effect_type *effect,int count,d3pnt *pnt)
 {
 	float				m_tick;
-	ring_type			*ring;
+	iface_ring_type		*ring;
 	ring_effect_data	*eff_ring;
 	
 	eff_ring=&effect->data.ring;
-	ring=&server.rings[eff_ring->ring_idx];
+	ring=&iface.ring_list.rings[eff_ring->ring_idx];
 
 	m_tick=((float)count)/10.0f;
 	
-	*x=effect->pnt.x+(int)(ring->vct.x*m_tick);
-	*y=effect->pnt.y+(int)(ring->vct.y*m_tick);
-	*z=effect->pnt.z+(int)(ring->vct.z*m_tick);
+	pnt->x=effect->pnt.x+(int)(ring->vct.x*m_tick);
+	pnt->y=effect->pnt.y+(int)(ring->vct.y*m_tick);
+	pnt->z=effect->pnt.z+(int)(ring->vct.z*m_tick);
 }
 
 /* =======================================================
@@ -69,23 +66,24 @@ void ring_draw_position(effect_type *effect,int count,int *x,int *y,int *z)
       
 ======================================================= */
 
-void ring_draw(effect_type *effect,int count)
+void ring_draw(effect_type *effect,int count,int image_offset)
 {
-	int						n,px,py,pz,nvertex,
-							life_tick;
+	int						n,nvertex,nindex,life_tick;
+	unsigned short			v_idx;
 	float					mx,my,mz,fx,fy,fz,
-							outer_sz,inner_sz,
+							outer_sz,inner_sz,rd,
 							color_dif,alpha,gx,gy,g_size,
 							f_count,f_tick;
-	float					*vl,*vt,*vertex_ptr,*vertex_array,*coord_array;
-	double					rd,rd2;
+	float					*pf,*vertex_ptr;
+	unsigned short			*index_ptr;
+	d3pnt					pnt;
 	d3col					col;
-	ring_type				*ring;
+	iface_ring_type			*ring;
 	ring_effect_data		*eff_ring;
 	matrix_type				mat_x,mat_y,mat_z;
 	
 	eff_ring=&effect->data.ring;
-	ring=&server.rings[eff_ring->ring_idx];
+	ring=&iface.ring_list.rings[eff_ring->ring_idx];
 	
 		// get size
 		
@@ -109,24 +107,20 @@ void ring_draw(effect_type *effect,int count)
 	color_dif=ring->end_color.b-ring->start_color.b;
     col.b=ring->start_color.b+((color_dif*f_count)/f_tick);
 
-	col.r*=eff_ring->tint.r;
-	col.g*=eff_ring->tint.g;
-	col.b*=eff_ring->tint.b;
-
 	alpha=ring->end_alpha-ring->start_alpha;
 	alpha=((alpha*f_count)/f_tick)+ring->start_alpha;
 	
 		// setup images
 		
-	effect_image_animate_get_uv(count,&ring->animate,&gx,&gy,&g_size);
+	effect_image_animate_get_uv(count,image_offset,&ring->animate,&gx,&gy,&g_size);
 	
 		// position and ring rotation
 
-	ring_draw_position(effect,count,&px,&py,&pz);
+	ring_draw_position(effect,count,&pnt);
 
-	mx=(float)px;
-	my=(float)py;
-	mz=(float)pz;
+	mx=(float)pnt.x;
+	my=(float)pnt.y;
+	mz=(float)pnt.z;
 
 	fx=f_count*ring->rot.x;
 	fx+=(fx*ring->rot_accel.x);
@@ -145,98 +139,105 @@ void ring_draw(effect_type *effect,int count)
 	matrix_rotate_y(&mat_y,fy);
 
 		// construct VBO
+		// effect vbos are dynamic, so it'll auto construct
+		// the first time called
 
-	nvertex=36*4;
+	nvertex=36*2;
+	nindex=36*6;
 
-	vertex_ptr=view_bind_map_next_vertex_object((nvertex*(3+2)));
-	if (vertex_ptr==NULL) return;
+	view_create_effect_vertex_object(effect,((nvertex*(3+2))*sizeof(float)),(nindex*sizeof(float)));
 
-		// set ring arrays
+	view_bind_effect_vertex_object(effect);
+	vertex_ptr=(float*)view_map_effect_vertex_object();
+	if (vertex_ptr==NULL) {
+		view_unbind_effect_vertex_object();
+		return;
+	}
 
-	vl=vertex_array=vertex_ptr;
-	vt=coord_array=vertex_ptr+(nvertex*3);
+		// create the ring vertexes
+
+	pf=vertex_ptr;
 
 	for (n=0;n!=360;n+=10) {
-		rd=(double)n*ANG_to_RAD;
-		rd2=((double)(n+10))*ANG_to_RAD;
+		rd=((float)n)*ANG_to_RAD;
 
-			// quad 1
+			// outer
 
-		fx=(float)cos(rd)*outer_sz;
-		fy=-((float)sin(rd)*outer_sz);
+		fx=cosf(rd)*outer_sz;
+		fy=-(sinf(rd)*outer_sz);
 		fz=0.0f;
 
-		*vt++=gx+(g_size*((fx+outer_sz)/(outer_sz*2.0f)));
-		*vt++=gy+(g_size*((fy+outer_sz)/(outer_sz*2.0f)));
-		
 		matrix_vertex_multiply(&mat_x,&fx,&fy,&fz);
 		matrix_vertex_multiply(&mat_z,&fx,&fy,&fz);
 		matrix_vertex_multiply(&mat_y,&fx,&fy,&fz);
 
-		*vl++=mx+fx;
-		*vl++=my+fy;
-		*vl++=mz+fz;
+		*pf++=mx+fx;
+		*pf++=my+fy;
+		*pf++=mz+fz;
 
-			// quad 2
+		*pf++=gx+(g_size*((fx+outer_sz)/(outer_sz*2.0f)));
+		*pf++=gy+(g_size*((fy+outer_sz)/(outer_sz*2.0f)));
 
-		fx=(float)cos(rd2)*outer_sz;
-		fy=-((float)sin(rd2)*outer_sz);
+			// inner
+
+		fx=cosf(rd)*inner_sz;
+		fy=-(sinf(rd)*inner_sz);
 		fz=0.0f;
 
-		*vt++=gx+(g_size*((fx+outer_sz)/(outer_sz*2.0f)));
-		*vt++=gy+(g_size*((fy+outer_sz)/(outer_sz*2.0f)));
-		
 		matrix_vertex_multiply(&mat_x,&fx,&fy,&fz);
 		matrix_vertex_multiply(&mat_z,&fx,&fy,&fz);
 		matrix_vertex_multiply(&mat_y,&fx,&fy,&fz);
 
-		*vl++=mx+fx;
-		*vl++=my+fy;
-		*vl++=mz+fz;
+		*pf++=mx+fx;
+		*pf++=my+fy;
+		*pf++=mz+fz;
 
-			// quad 3
-
-		fx=(float)cos(rd2)*inner_sz;
-		fy=-((float)sin(rd2)*inner_sz);
-		fz=0.0f;
-
-		*vt++=gx+(g_size*((fx+outer_sz)/(outer_sz*2.0f)));
-		*vt++=gy+(g_size*((fy+outer_sz)/(outer_sz*2.0f)));
-		
-		matrix_vertex_multiply(&mat_x,&fx,&fy,&fz);
-		matrix_vertex_multiply(&mat_z,&fx,&fy,&fz);
-		matrix_vertex_multiply(&mat_y,&fx,&fy,&fz);
-
-		*vl++=mx+fx;
-		*vl++=my+fy;
-		*vl++=mz+fz;
-
-			// quad 4
-
-		fx=(float)cos(rd)*inner_sz;
-		fy=-((float)sin(rd)*inner_sz);
-		fz=0.0f;
-
-		*vt++=gx+(g_size*((fx+outer_sz)/(outer_sz*2.0f)));
-		*vt++=gy+(g_size*((fy+outer_sz)/(outer_sz*2.0f)));
-		
-		matrix_vertex_multiply(&mat_x,&fx,&fy,&fz);
-		matrix_vertex_multiply(&mat_z,&fx,&fy,&fz);
-		matrix_vertex_multiply(&mat_y,&fx,&fy,&fz);
-
-		*vl++=mx+fx;
-		*vl++=my+fy;
-		*vl++=mz+fz;
+		*pf++=gx+(g_size*((fx+outer_sz)/(outer_sz*2.0f)));
+		*pf++=gy+(g_size*((fy+outer_sz)/(outer_sz*2.0f)));
 	}
 
 		// unmap vertex object
 
-	view_unmap_current_vertex_object();
+	view_unmap_effect_vertex_object();
+
+		// create the indexes
+		// last one needs to wrap around to beginning
+
+	view_bind_effect_index_object(effect);
+	index_ptr=(unsigned short*)view_map_effect_index_object();
+	if (index_ptr==NULL) {
+		view_unbind_effect_vertex_object();
+		return;
+	}
+
+	v_idx=0;
+
+	for (n=0;n!=35;n++) {
+		*index_ptr++=v_idx;
+		*index_ptr++=v_idx+2;
+		*index_ptr++=v_idx+1;
+
+		*index_ptr++=v_idx+1;
+		*index_ptr++=v_idx+2;
+		*index_ptr++=v_idx+3;
+
+		v_idx+=2;
+	}
+
+	*index_ptr++=v_idx;
+	*index_ptr++=0;
+	*index_ptr++=v_idx+1;
+
+	*index_ptr++=v_idx+1;
+	*index_ptr++=0;
+	*index_ptr++=1;
+
+	view_unmap_effect_index_object();
 
 		// draw ring
 		
-	gl_texture_simple_start();
-	gl_texture_simple_set(view_images_get_gl_id(ring->image_idx),FALSE,col.r,col.g,col.b,alpha);
+	gl_shader_draw_execute_simple_bitmap_set_texture(view_images_get_gl_id(ring->image_idx));
+	gl_shader_draw_execute_simple_bitmap_start(3,0,(3*sizeof(float)),((3+2)*sizeof(float)),&col,alpha);
 	
 	glEnable(GL_BLEND);
 	
@@ -247,30 +248,18 @@ void ring_draw(effect_type *effect,int count)
 		glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
 	}
 
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
-
 	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_FALSE);
 
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(3,GL_FLOAT,0,0);
-
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)((nvertex*3)*sizeof(float)));
-
-	glDrawArrays(GL_QUADS,0,nvertex);
-
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
+	glDrawElements(GL_TRIANGLES,nindex,GL_UNSIGNED_SHORT,(GLvoid*)0);
 	
 	glDepthMask(GL_TRUE);
-	
-	gl_texture_simple_end();
 
-		// unbind vertex object
+	gl_shader_draw_execute_simple_bitmap_end();
+
+		// unbind vertex/index object
 		
-	view_unbind_current_vertex_object();
+	view_unbind_effect_index_object();
+	view_unbind_effect_vertex_object();
 }
 

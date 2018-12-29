@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,20 +29,13 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "weapons.h"
-#include "models.h"
-#include "consoles.h"
-#include "interfaces.h"
-#include "video.h"
+#include "interface.h"
+#include "objects.h"
 
 extern map_type				map;
 extern camera_type			camera;
 extern server_type			server;
 extern view_type			view;
-
-extern void render_model_setup(int tick,model_draw *draw);
-extern void render_model_opaque(model_draw *draw);
-extern void render_model_transparent(model_draw *draw);
 
 /* =======================================================
 
@@ -50,8 +43,9 @@ extern void render_model_transparent(model_draw *draw);
       
 ======================================================= */
 
-void draw_weapon_hand(int tick,obj_type *obj,weapon_type *weap)
+void draw_weapon_hand_setup(obj_type *obj,weapon_type *weap)
 {
+	int				tick;
     model_draw		*draw;
 	model_type		*mdl;
 	
@@ -63,46 +57,94 @@ void draw_weapon_hand(int tick,obj_type *obj,weapon_type *weap)
 		// weapon model draw
 		
 	draw=&weap->draw;
-	if ((draw->uid==-1) || (!draw->on)) return;
+	if ((draw->model_idx==-1) || (!draw->on)) return;
 	
-	mdl=model_find_uid(draw->uid);
-	if (mdl==NULL) return;
+	mdl=server.model_list.models[draw->model_idx];
+
+		// regular weapon model
+
+	tick=game_time_get();
 	
-		// always draw weapons over view
-		// without rotation
+	model_draw_setup_clear(mdl,&draw->setup);
+	model_draw_setup_weapon(obj,weap,FALSE,FALSE);
+
+	model_calc_animation(draw,tick);
+	model_calc_draw_bones(draw);
+	
+	render_model_setup(draw,tick);
+	render_model_build_vertex_lists(draw,TRUE);
+
+		// dual wielded weapons
+
+	if ((weap->dual.on) && (weap->dual.active)) {
+	
+		draw=&weap->draw_dual;
+		if ((draw->model_idx!=-1) && (draw->on)) {
+			mdl=server.model_list.models[draw->model_idx];
+
+			model_draw_setup_clear(mdl,&draw->setup);
+			model_draw_setup_weapon(obj,weap,FALSE,TRUE);
+
+			model_calc_animation(draw,tick);
+			model_calc_draw_bones(draw);
+			
+			render_model_setup(draw,tick);
+			render_model_build_vertex_lists(draw,TRUE);
+		}
+	}
+}
+
+void draw_weapon_hand(obj_type *obj,weapon_type *weap)
+{
+	float			old_fov;
+    model_draw		*draw;
+	model_type		*mdl;
+	
+		// weapons hidden or zoom on?
 		
-	gl_3D_view();
-	gl_setup_project();
+	if (obj->hide_all_weapons) return;
+	if ((weap->zoom.on) && (weap->zoom.mode!=zoom_mode_off) && (obj->zoom_draw.on) && (!weap->zoom.show_weapon)) return;
+
+		// weapon model draw
+		
+	draw=&weap->draw;
+	if ((draw->model_idx==-1) || (!draw->on)) return;
 	
-	glDepthMask(GL_TRUE);
+	mdl=server.model_list.models[draw->model_idx];
+	
+		// handle any FOV overrides
+		
+	if (weap->hand.fov_override!=0.0f) {
+		old_fov=view.render->camera.fov;
+		view.render->camera.fov=weap->hand.fov_override;
+	}
+
+		// setup drawing
+	
 	glClear(GL_DEPTH_BUFFER_BIT);
 
 		// regular weapon model
-	
-	model_draw_setup_clear(mdl,&draw->setup);
-	model_draw_setup_weapon(tick,obj,weap,FALSE,FALSE);
 
-	model_calc_animation(draw);
-	model_calc_draw_bones(draw);
-	
-	render_model_setup(tick,draw);
 	render_model_opaque(draw);
 	render_model_transparent(draw);
 
 		// dual wielded weapons
 
 	if ((weap->dual.on) && (weap->dual.active)) {
+	
 		draw=&weap->draw_dual;
-		
-		model_draw_setup_clear(mdl,&draw->setup);
-		model_draw_setup_weapon(tick,obj,weap,FALSE,TRUE);
+		if ((draw->model_idx!=-1) && (draw->on)) {
+			mdl=server.model_list.models[draw->model_idx];
 
-		model_calc_animation(draw);
-		model_calc_draw_bones(draw);
+			render_model_opaque(draw);
+			render_model_transparent(draw);
+		}
+	}
+	
+		// restore FOV
 		
-		render_model_setup(tick,draw);
-		render_model_opaque(draw);
-		render_model_transparent(draw);
+	if (weap->hand.fov_override!=0.0f) {
+		view.render->camera.fov=old_fov;
 	}
 }
 

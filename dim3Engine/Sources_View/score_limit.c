@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,124 +29,108 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#define SCORE_LIMIT_SECOND_PAUSE		15
+#define SCORE_LIMIT_EXTRA_SECOND_FAIL	5
 
-#include "objects.h"
-#include "remotes.h"
-#include "scripts.h"
-#include "interfaces.h"
-#include "video.h"
-#include "inputs.h"
+#include "interface.h"
 #include "network.h"
-
-extern bool					game_loop_quit;
+#include "scripts.h"
+#include "objects.h"
 
 extern server_type			server;
 extern map_type				map;
+extern iface_type			iface;
 extern js_type				js;
-extern hud_type				hud;
 extern setup_type			setup;
 extern network_setup_type	net_setup;
 
 int							score_limit_start_tick;
-bool						score_limit_start_trigger;
 
-extern void game_reset(void);
 extern void remote_host_exit(void);
+extern void network_score_draw(void);
 
 /* =======================================================
 
-      Score Limit Open/Close
+      Open/Close Score Limits
       
 ======================================================= */
 
 void score_limit_open(void)
 {
-	gui_initialize(NULL,NULL,TRUE);
-	
-	score_limit_start_tick=time_get();
-	
-	server.state=gs_score_limit;
+	score_limit_start_tick=game_time_get_raw();
+
+	game_time_pause_start();
 }
 
 void score_limit_close(void)
 {
-	gui_shutdown();
-	
-	server.state=gs_running;
+	game_time_pause_end();
 }
 
 /* =======================================================
 
-      Score Limit Triggers
+      Check for Score Limits
       
 ======================================================= */
 
-void score_limit_trigger_clear(void)
+void score_limit_start(void)
 {
-	score_limit_start_trigger=FALSE;
-}
-
-void score_limit_trigger_check(void)
-{
-	if (score_limit_start_trigger) score_limit_open();
-}	
-
-void score_limit_trigger_set(void)
-{
-	obj_type			*obj;
+	obj_type		*player_obj;
 	
-	score_limit_start_trigger=TRUE;
-	
-		// if on the host, trigger all remotes to reach game limit
+		// goto score limit state
 		
-	if (net_setup.host.hosting) {
-		obj=object_find_uid(server.player_obj_uid);
-		net_host_player_send_others_packet(obj->remote.uid,net_action_request_game_score_limit,NULL,0);
-	}
+	server.next_state=gs_score_limit;
+	
+		// push score limit to all remotes
+
+	player_obj=server.obj_list.objs[server.player_obj_idx];
+	net_host_player_send_message_to_clients_all(NULL,net_action_request_game_score_limit,NULL,0);
 }
 
-void score_limit_trigger_set_check_scores(void)
+void score_limit_check_scores(void)
 {
 	int				n,limit,red_score,blue_score;
 	obj_type		*obj;
 
+		// only check score limits
+		// during network games on the host
+
+	if (net_setup.mode!=net_mode_host) return;
+
+		// is limit already on?
+
+	if (server.state==gs_score_limit) return;
+
 		// get score limit
 		
-	limit=setup.network.score_limit;
+	limit=net_setup.score_limit;
 	if (limit==0) return;
 
 		// team checks?
 		
-	if (net_setup.games[net_setup.game_idx].use_teams) {
+	if (iface.multiplayer.game_list.games[net_setup.game_idx].use_teams) {
 		
 		red_score=blue_score=0;
 
-		obj=server.objs;
-
-		for (n=0;n!=server.count.obj;n++) {
+		for (n=0;n!=max_obj_list;n++) {
+			obj=server.obj_list.objs[n];
+			if (obj==NULL) continue;
 		
-			if (!obj->player) {
-				obj++;
-				continue;
-			}
+			if ((obj->type!=object_type_player) && (obj->type!=object_type_remote_player) && (obj->type!=object_type_bot_multiplayer)) continue;
 			
 			if (obj->team_idx==net_team_red) {
 				red_score+=obj->score.score;
 				if (red_score>=limit) {
-					score_limit_trigger_set();
+					score_limit_start();
 					return;
 				}
 			}
 			else {
 				blue_score+=obj->score.score;
 				if (blue_score>=limit) {
-					score_limit_trigger_set();
+					score_limit_start();
 					return;
 				}
 			}
-			
-			obj++;
 		}
 		
 		return;
@@ -154,18 +138,38 @@ void score_limit_trigger_set_check_scores(void)
 	
 		// regular player checks
 
-	obj=server.objs;
+	for (n=0;n!=max_obj_list;n++) {
+		obj=server.obj_list.objs[n];
+		if (obj==NULL) continue;
 
-	for (n=0;n!=server.count.obj;n++) {
-		if (obj->player) {
+		if ((obj->type==object_type_player) || (obj->type==object_type_remote_player) || (obj->type==object_type_bot_multiplayer)) {
 			if (obj->score.score>=limit) {
-				score_limit_trigger_set();
+				score_limit_start();
 				return;
 			}
 		}
-
-		obj++;
 	}
+}
+
+/* =======================================================
+
+      Resume Timing
+      
+======================================================= */
+
+int score_limit_get_resume_time(void)
+{
+	int			secs;
+	
+	secs=net_setup.game_reset_secs-((game_time_get_raw()-score_limit_start_tick)/1000);
+	if (secs<0) secs=0;
+	
+	return(secs);
+}
+
+int score_limit_get_resume_tick(void)
+{
+	return(score_limit_start_tick+(net_setup.game_reset_secs*1000));
 }
 
 /* =======================================================
@@ -176,46 +180,41 @@ void score_limit_trigger_set_check_scores(void)
 
 void score_limit_run(void)
 {
-	int			tick;
-	
-		// we are paused so use regular ticks
-		
-	tick=time_get();
-	
-		// draw score limit
+	char			err_str[256];
 
-	gl_frame_start(NULL);
-	gui_draw_background(1.0f);
-	network_draw(tick);
-	gl_frame_end();
+	gl_frame_clear(FALSE);
+	gl_shader_frame_start();
 	
-		// pump events since we aren't calling
-		// the regular gui routines
+		// draw
 		
-	input_event_pump();
+	view_primitive_2D_color_quad(&iface.color.background,1.0f,0,iface.scale_x,0,iface.scale_y);
+	network_score_draw();
+	gl_frame_swap();
 	
-		// if we are hosting, we can exit early
-		// and send the reset message to clients
-		
-	if (net_setup.host.hosting) {
-		
-			// check for time exit or escape exit
-			
-		if ((tick>(score_limit_start_tick+(SCORE_LIMIT_SECOND_PAUSE*1000))) || (input_action_get_state_single(nc_menu))) {
-			game_reset();
-			score_limit_close();
+		// hosts can cancel at anytime
+		// or after timeout
+	
+	if (net_setup.mode==net_mode_host) {
+		if ((game_time_get_raw()>score_limit_get_resume_tick()) || (input_action_get_state_single(nc_menu))) {
+
+			server.next_state=gs_running;
+
+			if (!game_host_reset(err_str)) {
+				error_setup(err_str,"Hosting Game Canceled");
+				server.next_state=gs_error;
+				return;
+			}
 		}
-		
 		return;
 	}
 	
-		// clients can't exit, but if they don't
-		// get an update in the time + 10 seconds,
-		// they auto-quit the game
+		// clients either wait for host
+		// message or time out and fail
 		
-	if (tick>(score_limit_start_tick+((SCORE_LIMIT_SECOND_PAUSE+10)*1000))) {
-		score_limit_close();
-		remote_host_exit();
+	if (game_time_get_raw()>(score_limit_start_tick+((net_setup.game_reset_secs+SCORE_LIMIT_EXTRA_SECOND_FAIL)*1000))) {
+		error_setup("Host failed to restart game","Join Canceled");
+		server.next_state=gs_error;
 	}
+	
 }
 

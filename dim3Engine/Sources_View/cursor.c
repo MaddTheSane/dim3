@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,13 +29,27 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "video.h"
-#include "inputs.h"
+#include "interface.h"
 
-extern hud_type				hud;
+extern iface_type			iface;
 extern setup_type			setup;
+extern file_path_setup_type	file_path_setup;
 
-bitmap_type					cursor_bitmap;
+int							cursor_image_idx;
+
+/* =======================================================
+
+      Cursor Stubs if Mobile
+      
+======================================================= */
+
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+
+void cursor_initialize(void) {}
+void cursor_shutdown(void) {}
+void cursor_draw(void) {}
+
+#else
 
 /* =======================================================
 
@@ -47,13 +61,13 @@ void cursor_initialize(void)
 {
 	char		path[1024];
 	
-	file_paths_data(&setup.file_path_setup,path,"Bitmaps/UI_Elements","cursor","png");
-	bitmap_open(&cursor_bitmap,path,anisotropic_mode_none,mipmap_mode_none,FALSE,FALSE,FALSE);
+	file_paths_data(&file_path_setup,path,"Bitmaps/UI_Elements","cursor","png");
+	cursor_image_idx=view_images_load_single(path,FALSE,TRUE);
 }
 
 void cursor_shutdown(void)
 {
-	bitmap_close(&cursor_bitmap);
+	view_images_free_single(cursor_image_idx);
 }
 
 /* =======================================================
@@ -65,33 +79,27 @@ void cursor_shutdown(void)
 void cursor_draw(void)
 {
 	int				x,y,sz,lft,top,rgt,bot;
+	GLuint			gl_id;
+
+	gl_2D_view_interface();
 	
 		// get cursor position
 		
-	input_gui_get_mouse_position(&x,&y);
+	input_gui_get_position(&x,&y);
 
-	sz=(int)(((float)hud.scale_x)*cursor_size_factor);
+	sz=(int)(((float)iface.scale_x)*cursor_size_factor);
 		
 	lft=x;
 	rgt=lft+sz;
 	top=y;
 	bot=top+sz;
 
-		// draw mouse
+		// draw cursor
 		
-	gl_texture_simple_start();
-
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
-
-	glDisable(GL_DEPTH_TEST);
-
-	gl_texture_simple_set(cursor_bitmap.gl_id,TRUE,1.0f,1.0f,1.0f,1.0f);
-	view_draw_next_vertex_object_2D_texture_quad(lft,rgt,top,bot);
-	gl_texture_simple_end();
+	gl_id=view_images_get_gl_id(cursor_image_idx);
+	view_primitive_2D_texture_quad(gl_id,NULL,1.0f,lft,rgt,top,bot,0.0f,1.0f,0.0f,1.0f,TRUE);
 }
+
+#endif
 
 

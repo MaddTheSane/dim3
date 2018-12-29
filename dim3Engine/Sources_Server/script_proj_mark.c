@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,31 +29,29 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
+#include "objects.h"
 #include "scripts.h"
-#include "projectiles.h"
 
 extern js_type			js;
 
-JSBool js_proj_mark_get_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_mark_get_name(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_mark_get_size(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_mark_get_alpha(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_mark_set_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_mark_set_name(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_mark_set_size(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_mark_set_alpha(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
+JSValueRef js_proj_mark_get_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_mark_get_name(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_mark_get_size(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_mark_get_alpha(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+bool js_proj_mark_set_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception);
+bool js_proj_mark_set_name(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception);
+bool js_proj_mark_set_size(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception);
+bool js_proj_mark_set_alpha(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception);
 
-JSClass			proj_mark_class={"proj_mark_class",0,
-							script_add_property,JS_PropertyStub,
-							JS_PropertyStub,JS_PropertyStub,
-							JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub,JS_FinalizeStub};
+JSStaticValue 		proj_mark_props[]={
+							{"on",					js_proj_mark_get_on,				js_proj_mark_set_on,		kJSPropertyAttributeDontDelete},
+							{"name",				js_proj_mark_get_name,				js_proj_mark_set_name,		kJSPropertyAttributeDontDelete},
+							{"size",				js_proj_mark_get_size,				js_proj_mark_set_size,		kJSPropertyAttributeDontDelete},
+							{"alpha",				js_proj_mark_get_alpha,				js_proj_mark_set_alpha,		kJSPropertyAttributeDontDelete},
+							{0,0,0,0}};
 
-script_js_property	proj_mark_props[]={
-							{"on",					js_proj_mark_get_on,				js_proj_mark_set_on},
-							{"name",				js_proj_mark_get_name,				js_proj_mark_set_name},
-							{"size",				js_proj_mark_get_size,				js_proj_mark_set_size},
-							{"alpha",				js_proj_mark_get_alpha,				js_proj_mark_set_alpha},
-							{0}};
+JSClassRef			proj_mark_class;
 
 /* =======================================================
 
@@ -61,9 +59,19 @@ script_js_property	proj_mark_props[]={
       
 ======================================================= */
 
-void script_add_proj_mark_object(JSObject *parent_obj)
+void script_init_proj_mark_object(void)
 {
-	script_create_child_object(parent_obj,"mark",&proj_mark_class,proj_mark_props,NULL);
+	proj_mark_class=script_create_class("proj_mark_class",proj_mark_props,NULL);
+}
+
+void script_free_proj_mark_object(void)
+{
+	script_free_class(proj_mark_class);
+}
+
+JSObjectRef script_add_proj_mark_object(JSContextRef cx,JSObjectRef parent_obj,int script_idx)
+{
+	return(script_create_child_object(cx,parent_obj,proj_mark_class,"mark",script_idx));
 }
 
 /* =======================================================
@@ -72,52 +80,44 @@ void script_add_proj_mark_object(JSObject *parent_obj)
       
 ======================================================= */
 
-JSBool js_proj_mark_get_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_mark_get_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	proj_setup_type		*proj_setup;
 
-	proj_setup=proj_setup_get_attach();
-	if (proj_setup==NULL) return(JS_TRUE);
+	proj_setup=proj_setup_get_attach(j_obj);
+	if (proj_setup==NULL) return(script_null_to_value(cx));
 	
-	*vp=BOOLEAN_TO_JSVAL(proj_setup->mark.on);
-	
-	return(JS_TRUE);
+	return(script_bool_to_value(cx,proj_setup->mark.on));
 }
 
-JSBool js_proj_mark_get_name(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_mark_get_name(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	proj_setup_type		*proj_setup;
 
-	proj_setup=proj_setup_get_attach();
-	if (proj_setup==NULL) return(JS_TRUE);
+	proj_setup=proj_setup_get_attach(j_obj);
+	if (proj_setup==NULL) return(script_null_to_value(cx));
 	
-	*vp=script_string_to_value(proj_setup->mark.name);
-	
-	return(JS_TRUE);
+	return(script_string_to_value(cx,proj_setup->mark.name));
 }
 
-JSBool js_proj_mark_get_size(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_mark_get_size(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	proj_setup_type		*proj_setup;
 
-	proj_setup=proj_setup_get_attach();
-	if (proj_setup==NULL) return(JS_TRUE);
+	proj_setup=proj_setup_get_attach(j_obj);
+	if (proj_setup==NULL) return(script_null_to_value(cx));
 	
-	*vp=INT_TO_JSVAL(proj_setup->mark.size);
-	
-	return(JS_TRUE);
+	return(script_int_to_value(cx,proj_setup->mark.size));
 }
 
-JSBool js_proj_mark_get_alpha(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_mark_get_alpha(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	proj_setup_type		*proj_setup;
 
-	proj_setup=proj_setup_get_attach();
-	if (proj_setup==NULL) return(JS_TRUE);
+	proj_setup=proj_setup_get_attach(j_obj);
+	if (proj_setup==NULL) return(script_null_to_value(cx));
 	
-    *vp=script_float_to_value(proj_setup->mark.alpha);
-	
-	return(JS_TRUE);
+    return(script_float_to_value(cx,proj_setup->mark.alpha));
 }
 
 /* =======================================================
@@ -126,53 +126,47 @@ JSBool js_proj_mark_get_alpha(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
       
 ======================================================= */
 
-JSBool js_proj_mark_set_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+bool js_proj_mark_set_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception)
 {
 	proj_setup_type		*proj_setup;
 	
-	proj_setup=proj_setup_get_attach();
-	if (proj_setup==NULL) return(JS_TRUE);
-	
-    proj_setup->mark.on=JSVAL_TO_BOOLEAN(*vp);
-	
-	return(JS_TRUE);
+	proj_setup=proj_setup_get_attach(j_obj);
+	if (proj_setup!=NULL) proj_setup->mark.on=script_value_to_bool(cx,vp);
+
+	return(TRUE);
 }
 
-JSBool js_proj_mark_set_name(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+bool js_proj_mark_set_name(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception)
 {
 	proj_setup_type		*proj_setup;
-	
-	proj_setup=proj_setup_get_attach();
-	if (proj_setup==NULL) return(JS_TRUE);
-	
-	script_value_to_string(*vp,proj_setup->mark.name,name_str_len);
-	proj_setup_attach_mark(proj_setup);
-	
-	return(JS_TRUE);
+
+	proj_setup=proj_setup_get_attach(j_obj);
+	if (proj_setup!=NULL) {
+		script_value_to_string(cx,vp,proj_setup->mark.name,name_str_len);
+		proj_setup_attach_mark(proj_setup);
+	}
+
+	return(TRUE);
 }
 
-JSBool js_proj_mark_set_size(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+bool js_proj_mark_set_size(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception)
 {
 	proj_setup_type		*proj_setup;
 	
-	proj_setup=proj_setup_get_attach();
-	if (proj_setup==NULL) return(JS_TRUE);
-	
-	proj_setup->mark.size=JSVAL_TO_INT(*vp);
-	
-	return(JS_TRUE);
+	proj_setup=proj_setup_get_attach(j_obj);
+	if (proj_setup!=NULL) proj_setup->mark.size=script_value_to_int(cx,vp);
+
+	return(TRUE);
 }
 
-JSBool js_proj_mark_set_alpha(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+bool js_proj_mark_set_alpha(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception)
 {
 	proj_setup_type		*proj_setup;
 	
-	proj_setup=proj_setup_get_attach();
-	if (proj_setup==NULL) return(JS_TRUE);
-	
-	proj_setup->mark.alpha=script_value_to_float(*vp);
-	
-	return(JS_TRUE);
+	proj_setup=proj_setup_get_attach(j_obj);
+	if (proj_setup!=NULL) proj_setup->mark.alpha=script_value_to_float(cx,vp);
+
+	return(TRUE);
 }
 
 

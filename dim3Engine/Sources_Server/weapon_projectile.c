@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,17 +29,10 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "network.h"
 #include "scripts.h"
-#include "physics.h"
 #include "objects.h"
-#include "remotes.h"
-#include "weapons.h"
-#include "projectiles.h"
-#include "models.h"
-#include "interfaces.h"
-#include "consoles.h"
-#include "video.h"
 
 extern map_type				map;
 extern server_type			server;
@@ -47,8 +40,6 @@ extern camera_type			camera;
 extern view_type			view;
 extern setup_type			setup;
 extern network_setup_type	net_setup;
-
-extern float object_player_look_constrain(obj_type *obj,weapon_type *weap,float ang_x);
 
 /* =======================================================
 
@@ -70,7 +61,7 @@ void weapon_setup_fire(weapon_type *weap,int method)
 	
 		// setup weapon fire in object
 		
-	obj=object_find_uid(weap->obj_uid);
+	obj=server.obj_list.objs[weap->obj_idx];
 
 	strcpy(obj->weapon_fire.name,weap->name);
 	obj->weapon_fire.method=method;
@@ -82,30 +73,35 @@ void weapon_setup_fire(weapon_type *weap,int method)
       
 ======================================================= */
 
-bool weapon_add_projectile(int tick,obj_type *obj,weapon_type *weap,proj_setup_type *proj_setup,d3pnt *pt,d3ang *ang)
+bool weapon_add_projectile(obj_type *obj,weapon_type *weap,proj_setup_type *proj_setup,d3pnt *pt,d3ang *ang)
 {
-	d3pnt					spt,ept,hpt;
+	d3pnt					spt,ept;
 	proj_type				*proj;
 	ray_trace_contact_type	contact;
 	
 		// create new projectile
 		
-	proj=projectile_create(tick,obj,weap,proj_setup);
+	proj=projectile_create(obj,weap,proj_setup,FALSE);
 	if (proj==NULL) return(FALSE);
 
 	projectile_spawn_position(proj,pt,ang,obj);
 	
 		// call spawn
 		
-	scripts_post_event_console(&proj->attach,sd_event_spawn,0,0);
+	scripts_post_event_console(proj->script_idx,proj->idx,sd_event_spawn,sd_event_spawn_init,0);
 	
-		// if this object is the player object, then spawn projectile in remotes
+		// if this object is the player or multiplayer\map bot,
+		// then spawn projectile in remotes
 		
-	if (net_setup.client.joined) {
-		if ((obj->uid==server.player_obj_uid) || (obj->bot)) {
-			net_client_send_projectile_add(obj->remote.uid,weap->name,proj_setup->name,pt,ang);
-		}
+	if (net_setup.mode!=net_mode_none) {
+		if (object_networkable(obj)) net_client_send_projectile_add(obj,weap->name,proj_setup->name,pt,ang);
 	}
+	
+		// setup model drawing, we need
+		// this in case there are effects on
+		// a non-running projectile
+		
+	model_draw_setup_projectile(proj);
 
 		// add in object motion
 
@@ -126,23 +122,22 @@ bool weapon_add_projectile(int tick,obj_type *obj,weapon_type *weap,proj_setup_t
 	
 	contact.obj.on=TRUE;
 	contact.proj.on=FALSE;
-	contact.obj.ignore_uid=obj->uid;
+	contact.obj.ignore_idx=obj->idx;
 
-	contact.hit_mode=poly_ray_trace_hit_mode_all;
 	contact.origin=poly_ray_trace_origin_projectile;
 	
-	if (ray_trace_map_by_point(&spt,&ept,&hpt,&contact)) {
+	if (ray_trace_map_by_point(&spt,&ept,&contact)) {
 
-		proj->pnt.x=hpt.x;
-		proj->pnt.y=hpt.y;
-		proj->pnt.z=hpt.z;
-
+		proj->pnt.x=contact.hpt.x;
+		proj->pnt.y=contact.hpt.y;
+		proj->pnt.z=contact.hpt.z;
+		
 		proj->contact.hit_poly.mesh_idx=contact.poly.mesh_idx;
 		proj->contact.hit_poly.poly_idx=contact.poly.poly_idx;
-		proj->contact.obj_uid=contact.obj.uid;
-		proj->contact.proj_uid=-1;
+		proj->contact.obj_idx=contact.obj.idx;
+		proj->contact.proj_idx=-1;
 
-		projectile_hit(tick,proj,FALSE);
+		projectile_hit(proj);
 	}
 
 	return(TRUE);
@@ -154,7 +149,7 @@ bool weapon_add_projectile(int tick,obj_type *obj,weapon_type *weap,proj_setup_t
       
 ======================================================= */
 
-bool weapon_get_projectile_position_angle_weapon_model(int tick,obj_type *obj,weapon_type *weap,d3pnt *fire_pnt,d3ang *fire_ang,char *err_str)
+bool weapon_get_projectile_position_angle_weapon_model(obj_type *obj,weapon_type *weap,d3pnt *fire_pnt,d3ang *fire_ang,char *err_str)
 {
 	int						pose_idx,bone_idx;
 	model_type				*mdl;
@@ -163,11 +158,12 @@ bool weapon_get_projectile_position_angle_weapon_model(int tick,obj_type *obj,we
 
 		// get model
 
-	mdl=model_find_uid(weap->draw.uid);
-	if (mdl==NULL) {
+	if (weap->draw.model_idx==-1) {
 		if (err_str!=NULL) strcpy(err_str,"Weapon has no model");
 		return(FALSE);
 	}
+
+	mdl=server.model_list.models[weap->draw.model_idx];
 
 		// get current pose
 
@@ -179,13 +175,13 @@ bool weapon_get_projectile_position_angle_weapon_model(int tick,obj_type *obj,we
 	
 		// get 'fire' bone offset and calc
 
-	bone_idx=model_find_bone(mdl,weap->proj.fire_bone_tag);
+	bone_idx=model_find_bone(mdl,weap->proj.fire_bone_name);
 	if (bone_idx==-1) {
 		if (err_str!=NULL) strcpy(err_str,"Weapon has missing or no fire bone");
 		return(FALSE);
 	}
 
-	model_draw_setup_weapon(tick,obj,weap,TRUE,weap->dual.in_dual);
+	model_draw_setup_weapon(obj,weap,TRUE,weap->dual.in_dual);
 
 	if (weap->dual.in_dual) {
 		draw=&weap->draw_dual;
@@ -199,28 +195,26 @@ bool weapon_get_projectile_position_angle_weapon_model(int tick,obj_type *obj,we
 	setup->move.x=setup->move.y=setup->move.z=0;
 	setup->sway.x=setup->sway.y=setup->sway.z=0.0f;
 
-	model_calc_draw_bone_position(mdl,setup,pose_idx,bone_idx,&fire_pnt->x,&fire_pnt->y,&fire_pnt->z);
+	model_calc_draw_bone_position(mdl,setup,pose_idx,bone_idx,fire_pnt);
 
 	if (draw->flip_x) fire_pnt->x=-fire_pnt->x;
 	
 	fire_pnt->x+=draw->pnt.x;
-	fire_pnt->y+=draw->pnt.y;
+	fire_pnt->y+=(draw->pnt.y+obj->duck.y_move);
 	fire_pnt->z+=draw->pnt.z;
-
-	if (draw->no_rot.on) gl_project_fix_rotation(&fire_pnt->x,&fire_pnt->y,&fire_pnt->z);
 	
 		// fire angle
 
-	fire_ang->x=angle_add(setup->ang.x,obj->draw.setup.ang.x);
-	fire_ang->y=angle_add(setup->ang.y,angle_add(obj->draw.setup.ang.y,180.0f));
-	fire_ang->z=angle_add(setup->ang.z,obj->draw.setup.ang.z);
+	fire_ang->x=setup->ang.x;
+	fire_ang->y=setup->ang.y;
+	fire_ang->z=setup->ang.z;
 	
 	if (draw->flip_x) fire_ang->y=angle_add(fire_ang->y,180.0f);
 
 	return(TRUE);
 }
 
-bool weapon_get_projectile_position_angle_weapon_barrel(int tick,obj_type *obj,weapon_type *weap,d3pnt *fire_pnt,d3ang *fire_ang,char *err_str)
+bool weapon_get_projectile_position_angle_weapon_barrel(obj_type *obj,weapon_type *weap,d3pnt *fire_pnt,d3ang *fire_ang,char *err_str)
 {
 	int						pose_idx,bone_idx,dist;
 	d3pnt					barrel_pnt;
@@ -230,11 +224,12 @@ bool weapon_get_projectile_position_angle_weapon_barrel(int tick,obj_type *obj,w
 
 		// get weapon model
 
-	mdl=model_find_uid(weap->draw.uid);
-	if (mdl==NULL) {
+	if (weap->draw.model_idx==-1) {
 		if (err_str!=NULL) strcpy(err_str,"Weapon has no model");
 		return(FALSE);
 	}
+
+	mdl=server.model_list.models[weap->draw.model_idx];
 
 		// get current pose
 
@@ -246,13 +241,13 @@ bool weapon_get_projectile_position_angle_weapon_barrel(int tick,obj_type *obj,w
 	
 		// get 'fire' bone offset and calc
 
-	bone_idx=model_find_bone(mdl,weap->proj.fire_bone_tag);
+	bone_idx=model_find_bone(mdl,weap->proj.fire_bone_name);
 	if (bone_idx==-1) {
 		if (err_str!=NULL) strcpy(err_str,"Weapon has missing or no fire bone");
 		return(FALSE);
 	}
 
-	model_draw_setup_weapon(tick,obj,weap,TRUE,weap->dual.in_dual);
+	model_draw_setup_weapon(obj,weap,TRUE,weap->dual.in_dual);
 
 	if (weap->dual.in_dual) {
 		draw=&weap->draw_dual;
@@ -266,33 +261,29 @@ bool weapon_get_projectile_position_angle_weapon_barrel(int tick,obj_type *obj,w
 	setup->move.x=setup->move.y=setup->move.z=0;
 	setup->sway.x=setup->sway.y=setup->sway.z=0.0f;
 
-	model_calc_draw_bone_position(mdl,setup,pose_idx,bone_idx,&fire_pnt->x,&fire_pnt->y,&fire_pnt->z);
+	model_calc_draw_bone_position(mdl,setup,pose_idx,bone_idx,fire_pnt);
 
 	if (draw->flip_x) fire_pnt->x=-fire_pnt->x;
 
 	fire_pnt->x+=draw->pnt.x;
-	fire_pnt->y+=draw->pnt.y;
+	fire_pnt->y+=(draw->pnt.y+obj->duck.y_move);
 	fire_pnt->z+=draw->pnt.z;
-
-	if (draw->no_rot.on) gl_project_fix_rotation(&fire_pnt->x,&fire_pnt->y,&fire_pnt->z);
 
 		// get 'barrel' bone offset (draw bones already calced above)
 
-	bone_idx=model_find_bone(mdl,weap->proj.barrel_bone_tag);
+	bone_idx=model_find_bone(mdl,weap->proj.barrel_bone_name);
 	if (bone_idx==-1) {
 		if (err_str!=NULL) strcpy(err_str,"Weapon has missing or no barrel bone");
 		return(FALSE);
 	}
 
-	model_get_draw_bone_position(setup,bone_idx,&barrel_pnt.x,&barrel_pnt.y,&barrel_pnt.z);
+	model_get_draw_bone_position(setup,bone_idx,&barrel_pnt);
 
 	if (draw->flip_x) barrel_pnt.x=-barrel_pnt.x;
 
 	barrel_pnt.x+=draw->pnt.x;
-	barrel_pnt.y+=draw->pnt.y;
+	barrel_pnt.y+=(draw->pnt.y+obj->duck.y_move);
 	barrel_pnt.z+=draw->pnt.z;
-
-	if (draw->no_rot.on) gl_project_fix_rotation(&barrel_pnt.x,&barrel_pnt.y,&barrel_pnt.z);
 
 		// angles between them
 
@@ -304,7 +295,7 @@ bool weapon_get_projectile_position_angle_weapon_barrel(int tick,obj_type *obj,w
 	return(TRUE);
 }
 
-bool weapon_get_projectile_position_angle_object_model(int tick,obj_type *obj,weapon_type *weap,d3pnt *fire_pnt,d3ang *fire_ang,char *err_str)
+bool weapon_get_projectile_position_angle_object_model(obj_type *obj,weapon_type *weap,d3pnt *fire_pnt,d3ang *fire_ang,char *err_str)
 {
 	int						pose_idx,bone_idx;
 	model_type				*mdl;
@@ -312,11 +303,12 @@ bool weapon_get_projectile_position_angle_object_model(int tick,obj_type *obj,we
 	
 		// get model
 
-	mdl=model_find_uid(obj->draw.uid);
-	if (mdl==NULL) {
+	if (obj->draw.model_idx==-1) {
 		if (err_str!=NULL) strcpy(err_str,"Object has no model");
 		return(FALSE);
 	}
+
+	mdl=server.model_list.models[obj->draw.model_idx];
 
 		// get current pose
 
@@ -328,28 +320,26 @@ bool weapon_get_projectile_position_angle_object_model(int tick,obj_type *obj,we
 	
 		// get bone offset and calc
 
-	bone_idx=model_find_bone(mdl,weap->proj.object_fire_bone_tag);
+	bone_idx=model_find_bone(mdl,weap->proj.object_fire_bone_name);
 	if (bone_idx==-1) {
 		if (err_str!=NULL) strcpy(err_str,"Object has missing or no fire bone");
 		return(FALSE);
 	}
 
-	model_draw_setup_object(tick,obj);
+	model_draw_setup_object(obj);
 
 	setup=&obj->draw.setup;
 
 	setup->move.x=setup->move.y=setup->move.z=0;
 	setup->sway.x=setup->sway.y=setup->sway.z=0.0f;
 
-	model_calc_draw_bone_position(mdl,setup,pose_idx,bone_idx,&fire_pnt->x,&fire_pnt->y,&fire_pnt->z);
+	model_calc_draw_bone_position(mdl,setup,pose_idx,bone_idx,fire_pnt);
 
 		// move fire point in front of obj
 
 	fire_pnt->x+=obj->draw.pnt.x;
-	fire_pnt->y+=obj->draw.pnt.y;
+	fire_pnt->y+=(obj->draw.pnt.y+obj->duck.y_move);
 	fire_pnt->z+=obj->draw.pnt.z;
-
-	if (weap->draw.no_rot.on) gl_project_fix_rotation(&fire_pnt->x,&fire_pnt->y,&fire_pnt->z);
 	
 		// angle from object
 		
@@ -392,24 +382,24 @@ void weapon_get_projectile_position_angle_add_offset(d3ang *ang,d3ang *off_ang)
       
 ======================================================= */
 
-bool weapon_script_fire(int tick,obj_type *obj,weapon_type *weap,int method)
+bool weapon_script_fire(obj_type *obj,weapon_type *weap,int method)
 {
 		// fail under liquid?
 
-	if ((weap->fail_in_liquid) && (obj->liquid_mode==lm_under)) return(FALSE);
+	if ((weap->fail_in_liquid) && (obj->liquid.mode==lm_under)) return(FALSE);
 
 		// send event
 
 	weapon_setup_fire(weap,method);
-	scripts_post_event_console(&weap->attach,sd_event_weapon_fire,sd_event_weapon_fire_single,0);
+	scripts_post_event_console(weap->script_idx,-1,sd_event_weapon_fire,sd_event_weapon_fire_single,0);
 
 	if (weap->fire.cancel) return(FALSE);
 
 	if (!weap->dual.in_dual) {
-		weap->fire.last_fire_tick=tick;
+		weap->fire.last_fire_tick=game_time_get();
 	}
 	else {
-		weap->fire.last_fire_dual_tick=tick;
+		weap->fire.last_fire_dual_tick=game_time_get();
 	}
 	
 	return(TRUE);
@@ -421,7 +411,7 @@ bool weapon_script_fire(int tick,obj_type *obj,weapon_type *weap,int method)
       
 ======================================================= */
 
-bool weapon_script_projectile_spawn(int tick,obj_type *obj,weapon_type *weap,char *proj_name,d3pnt *pt,d3ang *ang,int count,float slop,char *err_str)
+bool weapon_script_projectile_spawn(obj_type *obj,weapon_type *weap,char *proj_name,d3pnt *pt,d3ang *ang,int count,float slop,char *err_str)
 {
 	int					n;
 	float				r_slop;
@@ -430,7 +420,7 @@ bool weapon_script_projectile_spawn(int tick,obj_type *obj,weapon_type *weap,cha
 
 		// fail under liquid?
 
-	if ((weap->fail_in_liquid) && (obj->liquid_mode==lm_under)) return(TRUE);
+	if ((weap->fail_in_liquid) && (obj->liquid.mode==lm_under)) return(TRUE);
 
 		// get projectile setup
 
@@ -455,17 +445,24 @@ bool weapon_script_projectile_spawn(int tick,obj_type *obj,weapon_type *weap,cha
 			proj_ang.z+=(slop-random_float(r_slop));
 		}
 
+			// zoom sways
+
+		if (weap->zoom.mode==zoom_mode_on) {
+			proj_ang.x+=obj->zoom_draw.sway_ang.x;
+			proj_ang.y+=obj->zoom_draw.sway_ang.y;
+		}
+
 			// hit-scan fires
 			
 		if (proj_setup->hitscan.on) {
-			projectile_hitscan(tick,obj,weap,proj_setup,pt,&proj_ang);
+			projectile_hitscan(obj,weap,proj_setup,pt,&proj_ang);
 		}
 		
 			// projectile fires
 			
 		else {
 
-			if (!weapon_add_projectile(tick,obj,weap,proj_setup,pt,&proj_ang)) {
+			if (!weapon_add_projectile(obj,weap,proj_setup,pt,&proj_ang)) {
 				strcpy(err_str,"No more spots to spawn projectiles");
 				return(FALSE);
 			}
@@ -482,20 +479,20 @@ bool weapon_script_projectile_spawn(int tick,obj_type *obj,weapon_type *weap,cha
       
 ======================================================= */
 
-bool weapon_script_projectile_spawn_object_model(int tick,obj_type *obj,weapon_type *weap,char *proj_name,int count,float slop,d3ang *off_ang,char *err_str)
+bool weapon_script_projectile_spawn_object_model(obj_type *obj,weapon_type *weap,char *proj_name,int count,float slop,d3ang *off_ang,char *err_str)
 {
 	d3pnt			pt;
 	d3ang			ang;
 
 		// get fire position and angle
 
-	if (!weapon_get_projectile_position_angle_object_model(tick,obj,weap,&pt,&ang,err_str)) return(FALSE);
+	if (!weapon_get_projectile_position_angle_object_model(obj,weap,&pt,&ang,err_str)) return(FALSE);
 
 	weapon_get_projectile_position_angle_add_offset(&ang,off_ang);
 
 		// spawn projectile
 		
-	return(weapon_script_projectile_spawn(tick,obj,weap,proj_name,&pt,&ang,count,slop,err_str));
+	return(weapon_script_projectile_spawn(obj,weap,proj_name,&pt,&ang,count,slop,err_str));
 }
 
 /* =======================================================
@@ -504,13 +501,13 @@ bool weapon_script_projectile_spawn_object_model(int tick,obj_type *obj,weapon_t
       
 ======================================================= */
 
-bool weapon_script_projectile_spawn_center(int tick,obj_type *obj,weapon_type *weap,char *proj_name,int count,float slop,d3ang *off_ang,char *err_str)
+bool weapon_script_projectile_spawn_center(obj_type *obj,weapon_type *weap,char *proj_name,int count,float slop,d3ang *off_ang,char *err_str)
 {
 	d3pnt			pt;
 	d3ang			ang;
 
 	weapon_get_projectile_position_center(obj,weap,&pt,&ang);
-	return(weapon_script_projectile_spawn(tick,obj,weap,proj_name,&pt,&ang,count,slop,err_str));
+	return(weapon_script_projectile_spawn(obj,weap,proj_name,&pt,&ang,count,slop,err_str));
 }
 
 /* =======================================================
@@ -519,48 +516,48 @@ bool weapon_script_projectile_spawn_center(int tick,obj_type *obj,weapon_type *w
       
 ======================================================= */
 
-bool weapon_script_projectile_spawn_weapon_model(int tick,obj_type *obj,weapon_type *weap,char *proj_name,int count,float slop,d3ang *off_ang,char *err_str)
+bool weapon_script_projectile_spawn_weapon_model(obj_type *obj,weapon_type *weap,char *proj_name,int count,float slop,d3ang *off_ang,char *err_str)
 {
 	d3pnt			pt;
 	d3ang			ang;
 
 		// if not in fpp, auto-switch to center spawn
 
-	if (camera.mode!=cv_fpp) {
-		return(weapon_script_projectile_spawn_center(tick,obj,weap,proj_name,count,slop,off_ang,err_str));
+	if (map.camera.camera_mode!=cv_fpp) {
+		return(weapon_script_projectile_spawn_center(obj,weap,proj_name,count,slop,off_ang,err_str));
 	}
 
 		// get fire position and angle
 
-	if (!weapon_get_projectile_position_angle_weapon_model(tick,obj,weap,&pt,&ang,err_str)) return(FALSE);
+	if (!weapon_get_projectile_position_angle_weapon_model(obj,weap,&pt,&ang,err_str)) return(FALSE);
 
 	weapon_get_projectile_position_angle_add_offset(&ang,off_ang);
 
 		// spawn projectile
 		
-	return(weapon_script_projectile_spawn(tick,obj,weap,proj_name,&pt,&ang,count,slop,err_str));
+	return(weapon_script_projectile_spawn(obj,weap,proj_name,&pt,&ang,count,slop,err_str));
 }
 
-bool weapon_script_projectile_spawn_weapon_barrel(int tick,obj_type *obj,weapon_type *weap,char *proj_name,int count,float slop,d3ang *off_ang,char *err_str)
+bool weapon_script_projectile_spawn_weapon_barrel(obj_type *obj,weapon_type *weap,char *proj_name,int count,float slop,d3ang *off_ang,char *err_str)
 {
 	d3pnt			pt;
 	d3ang			ang;
 
 		// if not in fpp, auto-switch to center spawn
 
-	if (camera.mode!=cv_fpp) {
-		return(weapon_script_projectile_spawn_center(tick,obj,weap,proj_name,count,slop,off_ang,err_str));
+	if (map.camera.camera_mode!=cv_fpp) {
+		return(weapon_script_projectile_spawn_center(obj,weap,proj_name,count,slop,off_ang,err_str));
 	}
 	
 		// get fire position and angle
 
-	if (!weapon_get_projectile_position_angle_weapon_barrel(tick,obj,weap,&pt,&ang,err_str)) return(FALSE);
+	if (!weapon_get_projectile_position_angle_weapon_barrel(obj,weap,&pt,&ang,err_str)) return(FALSE);
 	
 	weapon_get_projectile_position_angle_add_offset(&ang,off_ang);
 
 		// spawn projectile
 
-	return(weapon_script_projectile_spawn(tick,obj,weap,proj_name,&pt,&ang,count,slop,err_str));
+	return(weapon_script_projectile_spawn(obj,weap,proj_name,&pt,&ang,count,slop,err_str));
 }
 
 /* =======================================================
@@ -569,15 +566,15 @@ bool weapon_script_projectile_spawn_weapon_barrel(int tick,obj_type *obj,weapon_
       
 ======================================================= */
 
-void weapon_player_fire_down(int tick,obj_type *obj,weapon_type *weap,int method)
+void weapon_player_fire_down(obj_type *obj,weapon_type *weap,int method)
 {
-	int			clicked_obj_uid;
+	int			tick,clicked_obj_idx;
 	obj_type	*clicked_obj;
 	
 		// if no weapon, send message directly to object
 		
 	if (weap==NULL) {
-		scripts_post_event_console(&obj->attach,sd_event_weapon_fire,sd_event_weapon_fire_down,0);
+		scripts_post_event_console(obj->script_idx,-1,sd_event_weapon_fire,sd_event_weapon_fire_down,0);
 		return;
 	}
 	
@@ -587,19 +584,21 @@ void weapon_player_fire_down(int tick,obj_type *obj,weapon_type *weap,int method
 	
 		// if crosshair in click mode, the click
 		
-	clicked_obj_uid=obj->click.current_click_obj_uid;
-	if (clicked_obj_uid!=-1) {
-		clicked_obj=object_find_uid(clicked_obj_uid);
+	clicked_obj_idx=obj->click.current_click_obj_idx;
+	if (clicked_obj_idx!=-1) {
+		clicked_obj=server.obj_list.objs[clicked_obj_idx];
 		object_click(clicked_obj,obj);
-		crosshair_show_alt(tick,obj);
+		crosshair_show_alt(obj);
 		return;
 	}
 
 		// fail under liquid?
 
-	if ((weap->fail_in_liquid) && (obj->liquid_mode==lm_under)) return;
+	if ((weap->fail_in_liquid) && (obj->liquid.mode==lm_under)) return;
 	
 		// handle weapon fire down
+		
+	tick=game_time_get();
 		
 	weap->proj.next_repeat_tick=tick+weap->proj.repeat_tick;
 	
@@ -608,7 +607,7 @@ void weapon_player_fire_down(int tick,obj_type *obj,weapon_type *weap,int method
         // send fire message to weapon first
 		
 	weap->fire.cancel=FALSE;
-	scripts_post_event_console(&weap->attach,sd_event_weapon_fire,sd_event_weapon_fire_down,0);
+	scripts_post_event_console(weap->script_idx,-1,sd_event_weapon_fire,sd_event_weapon_fire_down,0);
 	if (weap->fire.cancel) return;
 	
 		// set last fire
@@ -624,11 +623,13 @@ void weapon_player_fire_down(int tick,obj_type *obj,weapon_type *weap,int method
    
         // if weapon OKs message, send message to player
 	
-	scripts_post_event_console(&obj->attach,sd_event_weapon_fire,sd_event_weapon_fire_down,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_weapon_fire,sd_event_weapon_fire_down,0);
 }
 
-void weapon_player_fire_repeat(int tick,obj_type *obj,weapon_type *weap)
+void weapon_player_fire_repeat(obj_type *obj,weapon_type *weap)
 {
+	int				tick;
+	
 		// if no weapon then no repeat
 		
 	if (weap==NULL) return;
@@ -639,14 +640,16 @@ void weapon_player_fire_repeat(int tick,obj_type *obj,weapon_type *weap)
 	
 		// no fire messages if crosshair is in click mode
 		
-	if (obj->click.current_click_obj_uid!=-1) return;
+	if (obj->click.current_click_obj_idx!=-1) return;
 
 		// fail under liquid?
 
-	if ((weap->fail_in_liquid) && (obj->liquid_mode==lm_under)) return;
+	if ((weap->fail_in_liquid) && (obj->liquid.mode==lm_under)) return;
 	
 		// time to repeat?
-		
+	
+	tick=game_time_get();
+	
 	if (tick<weap->proj.next_repeat_tick) return;
 	weap->proj.next_repeat_tick+=weap->proj.repeat_tick;
 	
@@ -657,7 +660,7 @@ void weapon_player_fire_repeat(int tick,obj_type *obj,weapon_type *weap)
         // send fire message to weapon first
 		
 	weap->fire.cancel=FALSE;
-	scripts_post_event_console(&weap->attach,sd_event_weapon_fire,sd_event_weapon_fire_repeat,0);
+	scripts_post_event_console(weap->script_idx,-1,sd_event_weapon_fire,sd_event_weapon_fire_repeat,0);
 	if (weap->fire.cancel) return;
 	
 		// set last fire
@@ -671,7 +674,7 @@ void weapon_player_fire_repeat(int tick,obj_type *obj,weapon_type *weap)
     
         // if weapon OKs message, send message to player
         
-	scripts_post_event_console(&obj->attach,sd_event_weapon_fire,sd_event_weapon_fire_repeat,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_weapon_fire,sd_event_weapon_fire_repeat,0);
 }
 
 void weapon_player_fire_up(obj_type *obj,weapon_type *weap,int method)
@@ -679,17 +682,17 @@ void weapon_player_fire_up(obj_type *obj,weapon_type *weap,int method)
 		// if no weapon, send message directly to object
 		
 	if (weap==NULL) {
-		scripts_post_event_console(&obj->attach,sd_event_weapon_fire,sd_event_weapon_fire_up,0);
+		scripts_post_event_console(obj->script_idx,-1,sd_event_weapon_fire,sd_event_weapon_fire_up,0);
 		return;
 	}
 	
 		// no fire messages if crosshair is in click mode
 		
-	if (obj->click.current_click_obj_uid!=-1) return;
+	if (obj->click.current_click_obj_idx!=-1) return;
 
 		// fail under liquid?
 
-	if ((weap->fail_in_liquid) && (obj->liquid_mode==lm_under)) return;
+	if ((weap->fail_in_liquid) && (obj->liquid.mode==lm_under)) return;
 	
 		// handle weapon fire up
 
@@ -698,12 +701,12 @@ void weapon_player_fire_up(obj_type *obj,weapon_type *weap,int method)
         // send fire message to weapon first
 		
 	weap->fire.cancel=FALSE;
-	scripts_post_event_console(&weap->attach,sd_event_weapon_fire,sd_event_weapon_fire_up,0);
+	scripts_post_event_console(weap->script_idx,-1,sd_event_weapon_fire,sd_event_weapon_fire_up,0);
 	if (weap->fire.cancel) return;
     
         // if weapon OKs message, send message to player
         
-	scripts_post_event_console(&obj->attach,sd_event_weapon_fire,sd_event_weapon_fire_up,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_weapon_fire,sd_event_weapon_fire_up,0);
 }
 
 /* =======================================================
@@ -712,7 +715,7 @@ void weapon_player_fire_up(obj_type *obj,weapon_type *weap,int method)
       
 ======================================================= */
 
-void weapon_kickback(int tick,obj_type *obj,weapon_type *weap)
+void weapon_kickback(obj_type *obj,weapon_type *weap)
 {
 	d3ang			ang;
 
@@ -780,6 +783,12 @@ void weapon_recoil_run(obj_type *obj,weapon_type *weap)
 
 void weapon_recoil_add(obj_type *obj,weapon_type *weap,d3ang *ang)
 {
+		// no recoil if not in fpp
+		
+	if (map.camera.camera_mode!=cv_fpp) return;
+	
+		// add in recoil
+		
 	ang->x=object_player_look_constrain(obj,weap,(ang->x+weap->recoil.ang.x));
 	ang->y=angle_add(ang->y,weap->recoil.ang.y);
 	ang->z+=weap->recoil.ang.z;

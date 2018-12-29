@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,38 +29,35 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "scripts.h"
 #include "objects.h"
-#include "projectiles.h"
 
 extern map_type			map;
 extern server_type		server;
 extern js_type			js;
 
-JSBool js_proj_hit_get_type(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_hit_get_name(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_hit_get_id(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_hit_get_isPlayer(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_hit_get_startTick(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_hit_get_materialName(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_hit_get_ejectVector(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_proj_hit_get_reflectVector(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
+JSValueRef js_proj_hit_get_type(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_hit_get_name(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_hit_get_id(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_hit_get_isPlayer(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_hit_get_startTick(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_hit_get_materialName(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_hit_get_ejectVector(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+JSValueRef js_proj_hit_get_reflectVector(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
 
-JSClass			proj_hit_class={"proj_hit_class",0,
-							script_add_property,JS_PropertyStub,
-							JS_PropertyStub,JS_PropertyStub,
-							JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub,JS_FinalizeStub};
+JSStaticValue 		proj_hit_props[]={
+							{"type",				js_proj_hit_get_type,				NULL,			kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{"name",				js_proj_hit_get_name,				NULL,			kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{"id",					js_proj_hit_get_id,					NULL,			kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{"isPlayer",			js_proj_hit_get_isPlayer,			NULL,			kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{"startTick",			js_proj_hit_get_startTick,			NULL,			kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{"materialName",		js_proj_hit_get_materialName,		NULL,			kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{"ejectVector",			js_proj_hit_get_ejectVector,		NULL,			kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{"reflectVector",		js_proj_hit_get_reflectVector,		NULL,			kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete},
+							{0,0,0,0}};
 
-script_js_property	proj_hit_props[]={
-							{"type",				js_proj_hit_get_type,				NULL},
-							{"name",				js_proj_hit_get_name,				NULL},
-							{"id",					js_proj_hit_get_id,					NULL},
-							{"isPlayer",			js_proj_hit_get_isPlayer,			NULL},
-							{"startTick",			js_proj_hit_get_startTick,			NULL},
-							{"materialName",		js_proj_hit_get_materialName,		NULL},
-							{"ejectVector",			js_proj_hit_get_ejectVector,		NULL},
-							{"reflectVector",		js_proj_hit_get_reflectVector,		NULL},
-							{0}};
+JSClassRef			proj_hit_class;
 
 /* =======================================================
 
@@ -68,9 +65,19 @@ script_js_property	proj_hit_props[]={
       
 ======================================================= */
 
-void script_add_proj_hit_object(JSObject *parent_obj)
+void script_init_proj_hit_object(void)
 {
-	script_create_child_object(parent_obj,"hit",&proj_hit_class,proj_hit_props,NULL);
+	proj_hit_class=script_create_class("proj_hit_class",proj_hit_props,NULL);
+}
+
+void script_free_proj_hit_object(void)
+{
+	script_free_class(proj_hit_class);
+}
+
+JSObjectRef script_add_proj_hit_object(JSContextRef cx,JSObjectRef parent_obj,int script_idx)
+{
+	return(script_create_child_object(cx,parent_obj,proj_hit_class,"hit",script_idx));
 }
 
 /* =======================================================
@@ -86,13 +93,13 @@ int js_get_proj_hit_type(proj_type *proj)
 		// check auto hits
 		
 	if (proj->action.hit_tick!=0) {
-		if ((proj->start_tick+proj->action.hit_tick)<=js.time.current_tick) return(sd_proj_hit_type_auto);
+		if ((proj->start_tick+proj->action.hit_tick)<=game_time_get()) return(sd_proj_hit_type_auto);
 	}
 
 		// object or projectile hits
 
-    if (proj->contact.obj_uid!=-1) return(sd_proj_hit_type_object);
-	if (proj->contact.proj_uid!=-1) return(sd_proj_hit_type_projectile);
+    if (proj->contact.obj_idx!=-1) return(sd_proj_hit_type_object);
+	if (proj->contact.proj_idx!=-1) return(sd_proj_hit_type_projectile);
 	if (proj->contact.melee) return(sd_proj_hit_type_melee);
 
 		// map hits
@@ -113,26 +120,33 @@ int js_get_proj_hit_type(proj_type *proj)
 void js_get_proj_hit_name(proj_type *proj,int hit_type,char *name)
 {
 	obj_type			*hit_obj;
+	weapon_type			*hit_weap;
 	proj_type			*hit_proj;
 	proj_setup_type		*hit_proj_setup;
+
+	name[0]=0x0;
 	
 	switch (hit_type) {
 	
 		case sd_proj_hit_type_object:
-			hit_obj=object_find_uid(proj->contact.obj_uid);
+			hit_obj=server.obj_list.objs[proj->contact.obj_idx];
+			if (hit_obj==NULL) return;
+
 			strcpy(name,hit_obj->name);
 			return;
 		
 		case sd_proj_hit_type_projectile:
-			hit_proj=projectile_find_uid(proj->contact.proj_uid);
-			hit_proj_setup=proj_setups_find_uid(hit_proj->proj_setup_uid);
+			hit_proj=server.proj_list.projs[proj->contact.proj_idx];
+			if (!hit_proj->on) return;
+
+			hit_obj=server.obj_list.objs[proj->contact.obj_idx];
+			if (hit_obj==NULL) return;
+
+			hit_weap=hit_obj->weap_list.weaps[hit_proj->weap_idx];
+			hit_proj_setup=hit_weap->proj_setup_list.proj_setups[hit_proj->proj_setup_idx];
 			strcpy(name,hit_proj_setup->name);
 			return;
 		
-		default:
-			name[0]=0x0;
-			return;
-			
 	}
 }
 
@@ -164,111 +178,97 @@ void js_get_proj_hit_material_name(proj_type *proj,int hit_type,char *name)
       
 ======================================================= */
 
-JSBool js_proj_hit_get_type(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_hit_get_type(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	proj_type			*proj;
 
-	proj=proj_get_attach();
-	if (proj==NULL) return(JS_TRUE);
+	proj=proj_get_attach(j_obj);
+	if (proj==NULL) return(script_null_to_value(cx));
 
-	*vp=INT_TO_JSVAL(js_get_proj_hit_type(proj));
-	
-	return(JS_TRUE);
+	return(script_int_to_value(cx,js_get_proj_hit_type(proj)));
 }
 
-JSBool js_proj_hit_get_name(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_hit_get_name(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	int					hit_type;
 	char				hit_name[name_str_len];
 	proj_type			*proj;
 
-	proj=proj_get_attach();
-	if (proj==NULL) return(JS_TRUE);
+	proj=proj_get_attach(j_obj);
+	if (proj==NULL) return(script_null_to_value(cx));
 
 	hit_type=js_get_proj_hit_type(proj);
 	js_get_proj_hit_name(proj,hit_type,hit_name);
-	*vp=script_string_to_value(hit_name);
-	
-	return(JS_TRUE);
+
+	return(script_string_to_value(cx,hit_name));
 }
 
-JSBool js_proj_hit_get_id(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_hit_get_id(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	proj_type			*proj;
 
-	proj=proj_get_attach();
-	if (proj==NULL) return(JS_TRUE);
+	proj=proj_get_attach(j_obj);
+	if (proj==NULL) return(script_null_to_value(cx));
 
-	*vp=INT_TO_JSVAL(proj->contact.obj_uid);
-	
-	return(JS_TRUE);
+	return(script_int_to_value(cx,proj->contact.obj_idx));
 }
 
-JSBool js_proj_hit_get_isPlayer(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_hit_get_isPlayer(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	proj_type			*proj;
 
-	proj=proj_get_attach();
-	if (proj==NULL) return(JS_TRUE);
+	proj=proj_get_attach(j_obj);
+	if (proj==NULL) return(script_null_to_value(cx));
 
-	*vp=BOOLEAN_TO_JSVAL(proj->contact.obj_uid==server.player_obj_uid);
-	
-	return(JS_TRUE);
+	return(script_bool_to_value(cx,proj->contact.obj_idx==server.player_obj_idx));
 }
 
-JSBool js_proj_hit_get_startTick(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_hit_get_startTick(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	proj_type			*proj;
 
-	proj=proj_get_attach();
-	if (proj==NULL) return(JS_TRUE);
+	proj=proj_get_attach(j_obj);
+	if (proj==NULL) return(script_null_to_value(cx));
 
-	*vp=INT_TO_JSVAL(proj->start_tick);
-	
-	return(JS_TRUE);
+	return(script_int_to_value(cx,proj->start_tick));
 }
 
-JSBool js_proj_hit_get_materialName(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_hit_get_materialName(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	int					hit_type;
 	char				hit_name[name_str_len];
 	proj_type			*proj;
 
-	proj=proj_get_attach();
-	if (proj==NULL) return(JS_TRUE);
+	proj=proj_get_attach(j_obj);
+	if (proj==NULL) return(script_null_to_value(cx));
 
 	hit_type=js_get_proj_hit_type(proj);
 	js_get_proj_hit_material_name(proj,hit_type,hit_name);
-	*vp=script_string_to_value(hit_name);
-	
-	return(JS_TRUE);
+
+	return(script_string_to_value(cx,hit_name));
 }
 
-JSBool js_proj_hit_get_ejectVector(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_hit_get_ejectVector(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	d3vct				vct;
 	proj_type			*proj;
 
-	proj=proj_get_attach();
-	if (proj==NULL) return(JS_TRUE);
+	proj=proj_get_attach(j_obj);
+	if (proj==NULL) return(script_null_to_value(cx));
 
 	projectile_eject_vector(proj,&vct);
-	*vp=script_angle_to_value(vct.x,vct.y,vct.z);
-	
-	return(JS_TRUE);
+	return(script_vector_to_value(cx,&vct));
 }
 
-JSBool js_proj_hit_get_reflectVector(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_proj_hit_get_reflectVector(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	d3vct				vct;
 	proj_type			*proj;
 
-	proj=proj_get_attach();
-	if (proj==NULL) return(JS_TRUE);
+	proj=proj_get_attach(j_obj);
+	if (proj==NULL) return(script_null_to_value(cx));
 
 	projectile_reflect_vector(proj,&vct);
-	*vp=script_angle_to_value(vct.x,vct.y,vct.z);
-	
-	return(JS_TRUE);
+	return(script_vector_to_value(cx,&vct));
 }
 

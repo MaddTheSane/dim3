@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,12 +29,10 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "network.h"
 #include "scripts.h"
 #include "objects.h"
-#include "cameras.h"
-#include "sounds.h"
-#include "physics.h"
 
 extern map_type				map;
 extern server_type			server;
@@ -50,7 +48,7 @@ extern network_setup_type	net_setup;
 void object_post_move_animation_event(obj_type *obj,int sub_event)
 {
 	obj->last_move_animation_event=sub_event;
-	scripts_post_event_console(&obj->attach,sd_event_animation_object,sub_event,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_animation_object,sub_event,0);
 }
 
 bool object_post_move_animation_event_change(obj_type *obj,int sub_event)
@@ -58,7 +56,7 @@ bool object_post_move_animation_event_change(obj_type *obj,int sub_event)
 	if (obj->last_move_animation_event==sub_event) return(FALSE);
 	
 	obj->last_move_animation_event=sub_event;
-	scripts_post_event_console(&obj->attach,sd_event_animation_object,sub_event,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_animation_object,sub_event,0);
 	
 	return(TRUE);
 }
@@ -66,7 +64,7 @@ bool object_post_move_animation_event_change(obj_type *obj,int sub_event)
 void object_post_turn_animation_event(obj_type *obj,int sub_event)
 {
 	obj->last_turn_animation_event=sub_event;
-	scripts_post_event_console(&obj->attach,sd_event_animation_object,sub_event,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_animation_object,sub_event,0);
 }
 
 bool object_post_turn_animation_event_change(obj_type *obj,int sub_event)
@@ -74,7 +72,7 @@ bool object_post_turn_animation_event_change(obj_type *obj,int sub_event)
 	if (obj->last_turn_animation_event==sub_event) return(FALSE);
 	
 	obj->last_turn_animation_event=sub_event;
-	scripts_post_event_console(&obj->attach,sd_event_animation_object,sub_event,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_animation_object,sub_event,0);
 	
 	return(TRUE);
 }
@@ -417,7 +415,7 @@ void object_start_jump(obj_type *obj)
 		// can't jump if flying or not on ground
 		
 	if ((obj->fly) || (!obj->jump.on)) return;
-	if ((obj->liquid_mode==lm_under) || (obj->air_mode!=am_ground)) return;
+	if ((obj->liquid.mode==lm_under) || (obj->liquid.mode==lm_float) || (obj->air_mode!=am_ground)) return;
 	
 		// if current standing slope is too high to climb, you can't jump
 		
@@ -428,7 +426,7 @@ void object_start_jump(obj_type *obj)
 		if (poly_ptr->mesh_idx!=-1) {
 			mesh_poly=&map.mesh.meshes[poly_ptr->mesh_idx].polys[poly_ptr->poly_idx];
 			if (!mesh_poly->box.flat) {
-				if (mesh_poly->slope.y>gravity_slope_max_y) return;
+				if (mesh_poly->slope.y>(map.physics.slope_max_ang*slope_angle_to_slope)) return;
 			}
 		}
 
@@ -436,31 +434,29 @@ void object_start_jump(obj_type *obj)
 	
 		// start jump
     
-	scripts_post_event_console(&obj->attach,sd_event_jump,0,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_jump,0,0);
     
 	obj->force.vct.y=-(float)obj->jump.y_add;
     obj->force.gravity=gravity_start_power;
     
-	scripts_post_event_console(&obj->attach,sd_event_animation_object,sd_event_animation_object_jump,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_animation_object,sd_event_animation_object_jump,0);
 }
 
 void object_liquid_jump(obj_type *obj)
 {
-	int				jump_add;
+		// only jump out of water if
+		// touching a polygon
+
+	if (obj->contact.hit_poly.mesh_idx==-1) return;
 	
-		// small jump if no polygon contact
-
-	jump_add=obj->jump.y_add;
-	if (obj->contact.hit_poly.mesh_idx==-1) jump_add/=2;
-
 		// jump out of water
 
-	scripts_post_event_console(&obj->attach,sd_event_jump,0,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_jump,0,0);
     
-	obj->force.vct.y=-(float)jump_add;
+	obj->force.vct.y=-(float)obj->jump.y_add;
     obj->force.gravity=gravity_start_power;
     
-	scripts_post_event_console(&obj->attach,sd_event_animation_object,sd_event_animation_object_jump,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_animation_object,sd_event_animation_object_jump,0);
 }
 
 /* =======================================================
@@ -491,17 +487,17 @@ void object_start_stand(obj_type *obj)
 		// stand up
     
     obj->duck.mode=dm_stand_up;
-	scripts_post_event_console(&obj->attach,sd_event_animation_object,sd_event_animation_object_stand_up,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_animation_object,sd_event_animation_object_stand_up,0);
 }
 
 void object_start_duck(obj_type *obj)
 {
 	if ((obj->fly) || (!obj->duck.on)) return;
-	if (obj->air_mode!=am_ground) return;
+	if ((obj->liquid.mode==lm_under) || (obj->liquid.mode==lm_float) || (obj->air_mode!=am_ground)) return;
     if ((obj->duck.mode==dm_duck) || (obj->duck.mode==dm_duck_down)) return;
 
     obj->duck.mode=dm_duck_down;
-	scripts_post_event_console(&obj->attach,sd_event_animation_object,sd_event_animation_object_duck_down,0);
+	scripts_post_event_console(obj->script_idx,-1,sd_event_animation_object,sd_event_animation_object_duck_down,0);
 }
 
 void object_ducking(obj_type *obj)
@@ -564,27 +560,60 @@ void object_clear_ambient(obj_type *obj)
       
 ======================================================= */
 
-bool object_enter_vehicle(obj_type *obj,char *err_str)
+bool object_enter_vehicle(obj_type *obj,int vehicle_idx,char *err_str)
 {
-	int				uid,x,z,y,sz;
+	int				n,x,z,y,sz;
+	d3pnt			motion;
 	obj_type		*vehicle_obj;
 	obj_vehicle		*vehicle;
 
-		// find a vehicle within right distance
-		
-	sz=(obj->size.z*3)>>1;
-	
-	angle_get_movement(obj->motion.ang.y,obj->size.z,&x,&z);
-	uid=collide_find_object_for_object_move(obj,x,z);
-		
-	if (uid==-1) {
-		if (err_str!=NULL) strcpy(err_str,"No object nearby to enter");
+		// can this object use vehicles?
+
+	if (!obj->vehicle.use_vehicles) {
+		if (err_str!=NULL) strcpy(err_str,"Object is flagged to not be able to enter vehicles");
 		return(FALSE);
 	}
 
-	vehicle_obj=object_find_uid(uid);
+		// if vehicle_idx is -1, then
+		// find a vehicle within right distance
+		// if we do this, we mark it so exiting
+		// causes the original obj to be reset
+		// to an exit position
+
+	obj->vehicle.offset_exit=FALSE;
+	
+	if (vehicle_idx==-1) {
+
+		obj->vehicle.offset_exit=TRUE;
+	
+		sz=(obj->size.z*3)>>1;
+		angle_get_movement(obj->motion.ang.y,obj->size.z,&motion.x,&motion.z);
+		
+		motion.y=0;
+		
+		for (n=0;n!=max_obj_list;n++) {
+			vehicle_obj=server.obj_list.objs[n];
+			if (vehicle_obj==NULL) continue;
+	    
+			if ((vehicle_obj->hidden) || (!vehicle_obj->contact.object_on) || (!vehicle_obj->vehicle.on) || (vehicle_obj->idx==obj->idx)) continue;
+
+				// check bounds
+				
+			if (collide_object_to_object(obj,&motion,vehicle_obj,FALSE)) {
+				vehicle_idx=n;
+				break;
+			}
+		}
+	}
+
+	if (vehicle_idx==-1) {
+		if (err_str!=NULL) strcpy(err_str,"No object to enter");
+		return(FALSE);
+	}
+
+	vehicle_obj=server.obj_list.objs[vehicle_idx];
 	if (!vehicle_obj->vehicle.on) {
-		if (err_str!=NULL) strcpy(err_str,"Nearby object is not a vehicle");
+		if (err_str!=NULL) strcpy(err_str,"Object is not a vehicle");
 		return(FALSE);
 	}
 	
@@ -592,28 +621,43 @@ bool object_enter_vehicle(obj_type *obj,char *err_str)
 		
 	vehicle=&vehicle_obj->vehicle;
 
-	if (vehicle->attach_obj_uid!=-1) {
+	if (vehicle->attach_obj_idx!=-1) {
 		if (err_str!=NULL) strcpy(err_str,"Vehicle has already been entered");
 		return(FALSE);
 	}
 
 		// get enter offset
 
-	x=vehicle_obj->pnt.x-obj->pnt.x;
-	z=vehicle_obj->pnt.z-obj->pnt.z;
-	y=vehicle_obj->pnt.y-obj->pnt.y;
-		
-	rotate_2D_point_center(&x,&z,-vehicle_obj->ang.y);
-		
-	vehicle->attach_offset.x=x;
-	vehicle->attach_offset.z=z;
-	vehicle->attach_offset.y=y;
-	
+	if (obj->vehicle.offset_exit) {
+		x=vehicle_obj->pnt.x-obj->pnt.x;
+		z=vehicle_obj->pnt.z-obj->pnt.z;
+		y=vehicle_obj->pnt.y-obj->pnt.y;
+			
+		rotate_2D_point_center(&x,&z,-vehicle_obj->ang.y);
+			
+		vehicle->attach_offset.x=x;
+		vehicle->attach_offset.z=z;
+		vehicle->attach_offset.y=y;
+	}
+
 		// send events
+
+	obj->vehicle.in_enter=TRUE;
+	obj->vehicle.in_exit=FALSE;
 		
-	scripts_post_event_console(&obj->attach,sd_event_vehicle,sd_event_vehicle_enter,0);
-	scripts_post_event_console(&vehicle_obj->attach,sd_event_vehicle,sd_event_vehicle_enter,0);
-	
+	scripts_post_event_console(obj->script_idx,-1,sd_event_vehicle,sd_event_vehicle_enter,0);
+	scripts_post_event_console(vehicle_obj->script_idx,-1,sd_event_vehicle,sd_event_vehicle_enter,0);
+
+	obj->vehicle.in_enter=FALSE;
+
+		// special check to see if exit
+		// was called from events, if so back out
+
+	if (obj->vehicle.in_exit) {
+		obj->vehicle.in_exit=FALSE;
+		return(TRUE);
+	}
+
 		// hide the object
 		
 	obj->hidden=TRUE;
@@ -621,18 +665,31 @@ bool object_enter_vehicle(obj_type *obj,char *err_str)
 	
 		// attach object
 
-	vehicle->attach_obj_uid=obj->uid;
+	vehicle->attach_obj_idx=obj->idx;
+
+		// move over team and score
+
+	vehicle_obj->team_idx=obj->team_idx;
+	memmove(&vehicle_obj->score,&obj->score,sizeof(obj_score));
 
 		// if this object was the camera object, then reconnect
 
-	if (camera.obj_uid==obj->uid) camera_connect(vehicle_obj);
+	if (camera.obj_idx==obj->idx) camera_connect(vehicle_obj);
 	
-		// if this object was the player object, move to vehicle
+		// if this object was the player object
+		// move player pointer to vehicle
 
-	if (server.player_obj_uid==obj->uid) {
-		vehicle_obj->player=TRUE;
-		obj->player=FALSE;
-		server.player_obj_uid=vehicle_obj->uid;
+	if (server.player_obj_idx==obj->idx) {
+		vehicle_obj->type=object_type_player;
+		obj->type=object_type_object;
+		server.player_obj_idx=vehicle_obj->idx;
+	}
+		// if this object is a remote player or bot
+		// switch types so vehicle becomes player/bot
+
+	if ((obj->type==object_type_remote_player) && (obj->type==object_type_bot_multiplayer)) {
+		vehicle_obj->type=obj->type;
+		obj->type=object_type_object;
 	}
 
 	return(TRUE);
@@ -640,89 +697,128 @@ bool object_enter_vehicle(obj_type *obj,char *err_str)
 
 bool object_exit_vehicle(obj_type *vehicle_obj,bool ignore_errors,char *err_str)
 {
-	int						x,z,y;
+	int						x,z,y,radius;
 	bool					empty;
-	d3pnt					spt,ept,hpt;
+	d3pnt					spt,ept;
 	obj_type				*orig_obj;
 	obj_vehicle				*vehicle;
 	ray_trace_contact_type	contact;
 
-		// don't exit moving vehicles
+		// if we are inside a vehicle enter
+		// event, then we need to just trigger
+		// an exit and leave so the state doesn't
+		// get messed up
 
-	if (!ignore_errors) {
-		if ((vehicle_obj->forward_move.moving) || (vehicle_obj->side_move.moving) || (vehicle_obj->vert_move.moving)) {
-			if (err_str!=NULL) strcpy(err_str,"Can not exit moving vehicle");
-			return(FALSE);
-		}
+	if (vehicle_obj->vehicle.in_enter) {
+		vehicle_obj->vehicle.in_exit=TRUE;
+		return(TRUE);
 	}
+		
+		// if nobody in vehicle, ignore
+		
+	if (vehicle_obj->vehicle.attach_obj_idx==-1) return(TRUE);
 
 		// get original object
 	
-	orig_obj=object_find_uid(vehicle_obj->vehicle.attach_obj_uid);
+	orig_obj=server.obj_list.objs[vehicle_obj->vehicle.attach_obj_idx];
 	
 		// find exit point
-		
+		// if we entered directly, we just leave the object
+		// where it was, if the vehicle is hidden, we
+		// direct exit where the vehicle was, otherwise
+		// we try to exit as we entered
+
 	vehicle=&vehicle_obj->vehicle;
-	
-	x=vehicle->attach_offset.x;
-	z=vehicle->attach_offset.z;
-	y=vehicle->attach_offset.y;
-	
-	rotate_2D_point_center(&x,&z,vehicle_obj->ang.y);
-	
-	orig_obj->pnt.x=vehicle_obj->pnt.x-x;
-	orig_obj->pnt.z=vehicle_obj->pnt.z-z;
-	orig_obj->pnt.y=vehicle_obj->pnt.y-y;
-
-	orig_obj->ang.y=angle_find(orig_obj->pnt.x,orig_obj->pnt.z,vehicle_obj->pnt.x,vehicle_obj->pnt.z);
-	
-		// is there enough empty space to exit?
-		// go from center of vehicle to obj + radius
-
-	spt.x=vehicle_obj->pnt.x;
-	spt.y=vehicle_obj->pnt.y;
-	spt.z=vehicle_obj->pnt.z;
-
-	ept.x=orig_obj->pnt.x;
-	ept.y=orig_obj->pnt.y;
-	ept.z=orig_obj->pnt.z;
-
-	ray_push_to_end(&ept,&spt,-orig_obj->size.radius);
-	
-	contact.obj.on=TRUE;
-	contact.proj.on=FALSE;
-	contact.obj.ignore_uid=vehicle_obj->uid;
-
-	contact.hit_mode=poly_ray_trace_hit_mode_all;
-	contact.origin=poly_ray_trace_origin_object;
-	
-	empty=!ray_trace_map_by_point(&spt,&ept,&hpt,&contact);
-	
-	if ((!empty) && (!ignore_errors)) {
-		if (err_str!=NULL) strcpy(err_str,"No space in map to exit");
-		return(FALSE);
+		
+	if (vehicle_obj->hidden) {
+		memmove(&orig_obj->pnt,&vehicle_obj->pnt,sizeof(d3pnt));
+		memmove(&orig_obj->ang,&vehicle_obj->ang,sizeof(d3ang));
 	}
+	
+	else {
+		if (orig_obj->vehicle.offset_exit) {
+			x=vehicle->attach_offset.x;
+			z=vehicle->attach_offset.z;
+			y=vehicle->attach_offset.y;
+			
+			rotate_2D_point_center(&x,&z,vehicle_obj->ang.y);
+			
+			orig_obj->pnt.x=vehicle_obj->pnt.x-x;
+			orig_obj->pnt.z=vehicle_obj->pnt.z-z;
+			orig_obj->pnt.y=vehicle_obj->pnt.y-y;
 
+			orig_obj->ang.y=angle_find(orig_obj->pnt.x,orig_obj->pnt.z,vehicle_obj->pnt.x,vehicle_obj->pnt.z);
+		
+				// is there enough empty space to exit?
+				// go from center of vehicle to obj + radius
+
+			spt.x=vehicle_obj->pnt.x;
+			spt.y=vehicle_obj->pnt.y;
+			spt.z=vehicle_obj->pnt.z;
+
+			ept.x=orig_obj->pnt.x;
+			ept.y=orig_obj->pnt.y;
+			ept.z=orig_obj->pnt.z;
+
+			radius=object_get_radius(orig_obj);
+			ray_push_to_end(&ept,&spt,-radius);
+			
+			contact.obj.on=TRUE;
+			contact.proj.on=FALSE;
+			contact.obj.ignore_idx=vehicle_obj->idx;
+
+			contact.origin=poly_ray_trace_origin_object;
+			
+			empty=!ray_trace_map_by_point(&spt,&ept,&contact);
+			
+			if (!empty) {
+				if (ignore_errors) {
+					memmove(&orig_obj->pnt,&vehicle_obj->pnt,sizeof(d3pnt));
+					memmove(&orig_obj->ang,&vehicle_obj->ang,sizeof(d3ang));
+				}
+				else {
+					if (err_str!=NULL) strcpy(err_str,"No space in map to exit");
+					return(FALSE);
+				}
+			}
+		}
+	}
+	
 		// send events
 		
-	scripts_post_event_console(&vehicle_obj->attach,sd_event_vehicle,sd_event_vehicle_exit,0);
-	scripts_post_event_console(&orig_obj->attach,sd_event_vehicle,sd_event_vehicle_exit,0);
+	scripts_post_event_console(vehicle_obj->script_idx,-1,sd_event_vehicle,sd_event_vehicle_exit,0);
+	scripts_post_event_console(orig_obj->script_idx,-1,sd_event_vehicle,sd_event_vehicle_exit,0);
 	
 		// exit
 	
-	vehicle->attach_obj_uid=-1;
+	vehicle->attach_obj_idx=-1;
 	object_stop(vehicle_obj);
+
+		// move score and team
+		// back to original object
+
+	orig_obj->team_idx=vehicle_obj->team_idx;
+	memmove(&orig_obj->score,&vehicle_obj->score,sizeof(obj_score));
 
 		// if this vehicle was the camera object, then reconnect
 
-	if (camera.obj_uid==vehicle_obj->uid) camera_connect(orig_obj);
+	if (camera.obj_idx==vehicle_obj->idx) camera_connect(orig_obj);
 
-		// if this vehicle was the player object, move to object
+		// if this vehicle was the player object
+		// move player pointer back to object
 
-	if (server.player_obj_uid==vehicle_obj->uid) {
-		vehicle_obj->player=FALSE;
-		orig_obj->player=TRUE;
-		server.player_obj_uid=orig_obj->uid;
+	if (server.player_obj_idx==vehicle_obj->idx) {
+		vehicle_obj->type=object_type_object;
+		orig_obj->type=object_type_player;
+		server.player_obj_idx=orig_obj->idx;
+	}
+
+		// if this vehicle was entered by
+		// a remote player or bot, switch back
+
+	if ((vehicle_obj->type==object_type_remote_player) && (vehicle_obj->type==object_type_bot_multiplayer)) {
+		orig_obj->type=vehicle_obj->type;
+		vehicle_obj->type=object_type_object;
 	}
 
 		// unhide the original object

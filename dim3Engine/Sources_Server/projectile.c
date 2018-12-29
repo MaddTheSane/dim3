@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,24 +29,65 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "scripts.h"
 #include "objects.h"
-#include "projectiles.h"
-#include "physics.h"
 
+extern iface_type			iface;
 extern map_type				map;
 extern server_type			server;
+extern js_type				js;
 
 /* =======================================================
 
-      Start Projectile List
+      Projectile List
       
 ======================================================= */
 
-void projectile_start(void)
+bool projectile_initialize_list(void)
 {
-	server.count.proj=0;
-	server.uid.proj=0;
+	int				n;
+
+		// pre-alloc all projectiles
+
+	for (n=0;n!=max_proj_list;n++) {
+
+			// memory for projectile
+
+		server.proj_list.projs[n]=(proj_type*)malloc(sizeof(proj_type));
+		if (server.proj_list.projs[n]==NULL) return(FALSE);
+
+			// not used
+
+		server.proj_list.projs[n]->on=FALSE;
+	}
+
+	return(TRUE);
+}
+
+void projectile_free_list(void)
+{
+	int				n;
+
+	for (n=0;n!=max_proj_list;n++) {
+		if (server.proj_list.projs[n]!=NULL) {
+			free(server.proj_list.projs[n]);
+			server.proj_list.projs[n]=NULL;
+		}
+	}
+}
+
+int projectile_count_list(void)
+{
+	int				n,count;
+
+	count=0;
+
+	for (n=0;n!=max_proj_list;n++) {
+		if (server.proj_list.projs[n]->on) count++;
+	}
+
+	return(count);
 }
 
 /* =======================================================
@@ -55,25 +96,38 @@ void projectile_start(void)
       
 ======================================================= */
 
-proj_type* projectile_create(int tick,obj_type *obj,weapon_type *weap,proj_setup_type *proj_setup)
+proj_type* projectile_create(obj_type *obj,weapon_type *weap,proj_setup_type *proj_setup,bool hit_scan)
 {
+	int					n,idx;
 	proj_type			*proj;
 
-	if (server.count.proj>=max_projectile) return(NULL);
-	
-	proj=&server.projs[server.count.proj];
-	server.count.proj++;
-	
-	proj->uid=server.uid.proj;
-	server.uid.proj++;
-	
-	proj->dispose=FALSE;
-	
-	proj->obj_uid=obj->uid;
-	proj->weap_uid=weap->uid;
-	proj->proj_setup_uid=proj_setup->uid;
+		// find free projectile
 
-	proj->start_tick=tick;
+	idx=-1;
+
+	for (n=0;n!=max_proj_list;n++) {
+		if (!server.proj_list.projs[n]->on) {
+			idx=n;
+			break;
+		}
+	}
+
+	if (idx==-1) return(NULL);
+
+		// initialize
+	
+	proj=server.proj_list.projs[idx];
+	
+	proj->idx=idx;
+	proj->on=TRUE;
+	
+	proj->script_dispose=FALSE;
+	
+	proj->obj_idx=obj->idx;
+	proj->weap_idx=weap->idx;
+	proj->proj_setup_idx=proj_setup->idx;
+
+	proj->start_tick=game_time_get();
 	
 	object_clear_position(&proj->pnt);
 	object_clear_angle(&proj->ang);
@@ -84,7 +138,6 @@ proj_type* projectile_create(int tick,obj_type *obj,weapon_type *weap,proj_setup
 	proj->decel_speed=proj_setup->decel_speed;
 	proj->decel_min_speed=proj_setup->decel_min_speed;
     proj->stick=FALSE;
-    proj->flag_melee_hit=FALSE;
 	
 	memmove(&proj->size,&proj_setup->size,sizeof(obj_size));
 
@@ -97,34 +150,37 @@ proj_type* projectile_create(int tick,obj_type *obj,weapon_type *weap,proj_setup
 	memmove(&proj->draw,&proj_setup->draw,sizeof(model_draw));
 	memmove(&proj->action,&proj_setup->action,sizeof(proj_action_type));
 	
-	proj->attach.thing_type=thing_type_projectile;
-	proj->attach.thing_uid=proj->uid;
-	proj->attach.script_uid=proj_setup->attach.script_uid;
+		// connections for animated effects
+		
+	proj->draw.connect.obj_idx=obj->idx;
+	proj->draw.connect.weap_idx=weap->idx;
+	proj->draw.connect.proj_idx=idx;
+	proj->draw.connect.net_sound=FALSE;
+	proj->draw.connect.motion_vct.x=0.0f;
+	proj->draw.connect.motion_vct.y=0.0f;
+	proj->draw.connect.motion_vct.z=0.0f;
 
-	scripts_clear_attach_data(&proj->attach);
+		// scripts
+		
+	proj->script_idx=proj_setup->script_idx;
 
     return(proj);
 }
 
 /* =======================================================
 
-      Find Projectile by Unique ID
+      Projectile Radius
       
 ======================================================= */
 
-proj_type* projectile_find_uid(int uid)
+int projectile_get_radius(proj_type *proj)
 {
-	int				i;
-	proj_type		*proj;
+	int			radius;
 	
-	proj=server.projs;
+	radius=proj->size.x;
+	if (proj->size.z>radius) radius=proj->size.z;
 	
-	for ((i=0);(i!=server.count.proj);i++) {
-		if (proj->uid==uid) return(proj);
-		proj++;
-	}
-	
-	return(NULL);
+	return(radius>>1);
 }
 
 /* =======================================================
@@ -152,9 +208,15 @@ void projectile_set_position(proj_type *proj,d3pnt *pt,d3ang *ang)
 	memmove(&proj->ang,ang,sizeof(d3ang));
 	memmove(&proj->motion.ang,ang,sizeof(d3ang));
 	
+		// make sure draw is setup
+		// for launch effects and spawn animations
+		
+	memmove(&proj->draw.pnt,pnt,sizeof(d3pnt));
+	
 		// initial gravity
 	
 	proj->force.gravity=gravity_start_power;
+	proj->gravity_add=0.0f;
 }
 
 /* =======================================================
@@ -173,48 +235,7 @@ void projectile_spawn_position(proj_type *proj,d3pnt *pt,d3ang *ang,obj_type *pa
 	projectile_set_position(proj,pt,ang);
 	projectile_set_origin(proj);
 	
-	proj->contact.obj_uid=-1;
-}
-
-/* =======================================================
-
-      Get Projectile Motion
-      
-======================================================= */
-
-void projectile_set_motion(proj_type *proj,float speed,float ang_y,float ang_x,int *x,int *y,int *z)
-{
-	float			fx,fy,fz;
-	matrix_type		mat;
-	
-		// get motion
-		
-	fx=fy=0;
-	fz=-speed;
-	
-	matrix_rotate_x(&mat,ang_x);
-	matrix_vertex_multiply(&mat,&fx,&fy,&fz);
-	
-	matrix_rotate_y(&mat,ang_y);
-	matrix_vertex_multiply(&mat,&fx,&fy,&fz);
-	
-		// add in the forces
-		
-	fx+=proj->force.vct.x;
-	fy+=proj->force.vct.y;
-	fz+=proj->force.vct.z;
-	
-		// save for projectile
-		
-	proj->motion.vct.x=fx;
-	proj->motion.vct.z=fz;
-	proj->motion.vct.y=fy;
-	
-		// return as integers
-	
-	*x=(int)fx;
-	*y=(int)fy;
-	*z=(int)fz;
+	proj->contact.obj_idx=-1;
 }
 
 /* =======================================================
@@ -223,55 +244,53 @@ void projectile_set_motion(proj_type *proj,float speed,float ang_y,float ang_x,i
       
 ======================================================= */
 
-void projectile_mark_dispose(proj_type *proj)
+void projectile_dispose(proj_type *proj)
 {
-	proj->dispose=TRUE;
+		// can't dispose if not on
+
+	if (!proj->on) return;
+
+		// delete all projectile times
+		// associated with this projectile
+		// (can't search by script index because
+		// projectiles shared scripts from setup)
+		
+	timers_trigger_dispose_projectile_all(proj->script_idx);
+
+		// remove any effects attached
+		// to a bone
+		
+	effect_projectile_bone_attach_particle_dispose(proj->idx);
+
+		// mark as unused
+
+	proj->on=FALSE;
 }
 
-void projectile_dispose(void)
+void projectile_dispose_object(obj_type *obj)
 {
-	int				i;
+	int				n;
 	proj_type		*proj;
-	
-		// delete all projectiles marked as disposed
-	
-	i=0;
-	
-	while (i<server.count.proj) {
-		proj=&server.projs[i];
-		if (!proj->dispose) {
-			i++;
-			continue;
-		}
-	
-			// delete all timers
-			
-		timers_clear(&proj->attach,timer_mode_repeat);
-		timers_clear(&proj->attach,timer_mode_single);
-	
-			// delete projectile
-			
-		if (i<(server.count.proj-1)) {
-			memmove(&server.projs[i],&server.projs[i+1],(sizeof(proj_type)*((server.count.proj-i)-1)));
-		}
+
+	for (n=0;n!=max_proj_list;n++) {
+		proj=server.proj_list.projs[n];
+		if (proj==NULL) continue;			// sometimes the list can be cleaned up if disposing objects game bound
+		if (!proj->on) continue;
 		
-		server.count.proj--;
-		if (server.count.proj==0) break;
+		if (proj->obj_idx==obj->idx) projectile_dispose(proj);
 	}
 }
 
 void projectile_dispose_all(void)
 {
-	int				i;
+	int				n;
 	proj_type		*proj;
 	
-	proj=server.projs;
-	
-	for (i=0;i<server.count.proj;i++) {
-		timers_clear(&proj->attach,timer_mode_repeat);
-		timers_clear(&proj->attach,timer_mode_single);
-		proj++;
+	for (n=0;n!=max_proj_list;n++) {
+		proj=server.proj_list.projs[n];
+		if (proj==NULL) continue;
+		if (!proj->on) continue;
+		
+		projectile_dispose(proj);
 	}
-	
-	server.count.proj=0;
 }

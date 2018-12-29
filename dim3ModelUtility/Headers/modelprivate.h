@@ -21,39 +21,20 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2006 Klink! Software www.klinksoftware.com
+(c) 2000-2010 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
-
-//
-// Setting Structure
-//
-
-typedef struct		{
-						int						anisotropic_mode,mipmap_mode;
-						bool					compression;
-						file_path_setup_type	file_path_setup;
-                    } modelutility_settings_type;
 
 //
 // Functions
 //
 
-extern int model_find_bone(model_type *mdl,model_tag tag);
-extern int model_find_pose(model_type *mdl,char *posename);
-extern bool xml_add_attribute_model_tag(char *name,model_tag tag);
+extern bool model_read_xml(model_type *model);
+extern bool model_write_xml(model_type *model,char *err_str);
 
-extern model_tag xml_get_attribute_model_tag(int xml_tag,char *name);
-extern void decode_mesh_v1_xml(model_type *model,int model_head);
-extern void decode_mesh_v2_xml(model_type *model,int model_head);
-extern void encode_mesh_v2_xml(model_type *model);
-extern bool read_mesh_xml(model_type *model);
-extern bool write_mesh_xml(model_type *model);
-
-extern bool read_pose_xml(model_type *model);
-extern bool write_pose_xml(model_type *model);
-extern bool read_animate_xml(model_type *model);
-extern bool write_animate_xml(model_type *model);
+extern bool model_read_v2_mesh_xml(model_type *model);
+extern bool model_read_v2_pose_xml(model_type *model);
+extern bool model_read_v2_animate_xml(model_type *model);
 
 extern void model_textures_clear(model_type *model);
 extern void model_textures_read(model_type *model);

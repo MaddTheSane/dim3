@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -31,21 +31,16 @@ and can be sold or given away.
 
 #include "scripts.h"
 
-JSBool js_model_shadow_get_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
-JSBool js_model_shadow_set_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp);
+JSValueRef js_model_shadow_get_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception);
+bool js_model_shadow_set_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception);
 
 extern js_type			js;
 
-JSClass			model_shadow_class={"model_shadow_class",0,
-							script_add_property,JS_PropertyStub,
-							JS_PropertyStub,JS_PropertyStub,
-							JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub,JS_FinalizeStub};
+JSStaticValue 		model_shadow_props[]={
+							{"on",					js_model_shadow_get_on,				js_model_shadow_set_on,		kJSPropertyAttributeDontDelete},
+							{0,0,0,0}};
 
-script_js_property	model_shadow_props[]={
-							{"on",					js_model_shadow_get_on,				js_model_shadow_set_on},
-							{0}};
-
-extern model_draw* js_find_model_draw(JSObject *j_obj,bool is_child);
+JSClassRef			model_shadow_class;
 
 /* =======================================================
 
@@ -53,9 +48,19 @@ extern model_draw* js_find_model_draw(JSObject *j_obj,bool is_child);
       
 ======================================================= */
 
-void script_add_model_shadow_object(JSObject *parent_obj)
+void script_init_model_shadow_object(void)
 {
-	script_create_child_object(parent_obj,"shadow",&model_shadow_class,model_shadow_props,NULL);
+	model_shadow_class=script_create_class("model_shadow_class",model_shadow_props,NULL);
+}
+
+void script_free_model_shadow_object(void)
+{
+	script_free_class(model_shadow_class);
+}
+
+JSObjectRef script_add_model_shadow_object(JSContextRef cx,JSObjectRef parent_obj,int script_idx)
+{
+	return(script_create_child_object(cx,parent_obj,model_shadow_class,"shadow",script_idx));
 }
 
 /* =======================================================
@@ -64,17 +69,15 @@ void script_add_model_shadow_object(JSObject *parent_obj)
       
 ======================================================= */
 
-JSBool js_model_shadow_get_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+JSValueRef js_model_shadow_get_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef *exception)
 {
 	model_draw			*draw;
 	model_draw_shadow	*shadow;
 
-	draw=js_find_model_draw(j_obj,TRUE);
+	draw=script_find_model_draw(j_obj);
 	shadow=&draw->shadow;
 	
-	*vp=BOOLEAN_TO_JSVAL(shadow->on);
-
-	return(JS_TRUE);
+	return(script_bool_to_value(cx,shadow->on));
 }
 
 /* =======================================================
@@ -83,16 +86,21 @@ JSBool js_model_shadow_get_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
       
 ======================================================= */
 
-JSBool js_model_shadow_set_on(JSContext *cx,JSObject *j_obj,jsval id,jsval *vp)
+bool js_model_shadow_set_on(JSContextRef cx,JSObjectRef j_obj,JSStringRef name,JSValueRef vp,JSValueRef *exception)
 {
 	model_draw			*draw;
 	model_draw_shadow	*shadow;
+	
+	if (!script_in_construct(j_obj)) {
+		*exception=script_create_exception(cx,"Can only set model shadow in the construct event");
+		return(TRUE);
+	}
 
-	draw=js_find_model_draw(j_obj,TRUE);
+	draw=script_find_model_draw(j_obj);
 	shadow=&draw->shadow;
 
-	shadow->on=JSVAL_TO_BOOLEAN(*vp);
-
-	return(JS_TRUE);
+	shadow->on=script_value_to_bool(cx,vp);
+	
+	return(TRUE);
 }
 

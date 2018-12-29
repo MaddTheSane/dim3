@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,260 +29,231 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "video.h"
+#include "interface.h"
 
 extern map_type				map;
 extern view_type			view;
+extern server_type			server;
 extern setup_type			setup;
 
-int							cur_vbo_cache_idx,cur_vbo_cache_index_idx,
-							vbo_cache_sz[view_vertex_object_count],
-							vbo_cache_index_sz[view_vertex_object_count];
-GLuint						vbo_map,vbo_map_index,
-							vbo_liquid,vbo_liquid_index,
-							vbo_sky,
-							vbo_cache[view_vertex_object_count],
-							vbo_cache_index[view_vertex_object_count];
+int							vbo_text_index,vbo_utility_index;
+bool						vbo_utility_init;
+GLuint						vbo_sky,vbo_fog,vbo_rain,
+							vbo_text[view_vbo_text_count],
+							vbo_utility[view_vbo_utility_count];
 
 /* =======================================================
 
-      Create and Dispose Vertex Objects
+      Mesh and Liquid VBOs
       
 ======================================================= */
 
-void view_create_vertex_objects(void)
+void view_create_mesh_liquid_vertex_object(map_vbo_type *vbo,int vertex_count,int vertex_stride,int index_count)
 {
-	int			n;
+	glGenBuffers(1,&vbo->vertex);
+	glGenBuffers(1,&vbo->index);
 
-		// map, liquid and sky vbo
+		// init the vertex buffer
 
-	glGenBuffersARB(1,&vbo_map);
-	glGenBuffersARB(1,&vbo_map_index);
+	vbo->vertex_count=vertex_count;
+	vbo->vertex_mem_sz=vertex_count*vertex_stride;
+	vbo->vertex_stride=vertex_stride;
 
-	glGenBuffersARB(1,&vbo_liquid);
-	glGenBuffersARB(1,&vbo_liquid_index);
+	glBindBuffer(GL_ARRAY_BUFFER,vbo->vertex);
+	glBufferData(GL_ARRAY_BUFFER,vbo->vertex_mem_sz,NULL,GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER,0);
 
-	glGenBuffersARB(1,&vbo_sky);
+		// init the index buffer
 
-		// misc vbos
+	vbo->index_count=index_count;
+	vbo->index_mem_sz=index_count*sizeof(unsigned short);
 
-	glGenBuffersARB(view_vertex_object_count,vbo_cache);
-	glGenBuffersARB(view_vertex_object_count,vbo_cache_index);
-
-		// initial sizes
-		// we only remap the buffer is the size is greater
-		// while this cost us memory, we don't get the cost of
-		// reseting these buffers constantly
-
-	for (n=0;n!=view_vertex_object_count;n++) {
-		vbo_cache_sz[n]=-1;
-		vbo_cache_index_sz[n]=-1;
-	}
-
-		// start at first misc vbo
-
-	cur_vbo_cache_idx=0;
-	cur_vbo_cache_index_idx=0;
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,vbo->index);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,vbo->index_mem_sz,NULL,GL_STATIC_DRAW);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 }
 
-void view_dispose_vertex_objects(void)
+void view_dispose_mesh_liquid_vertex_object(map_vbo_type *vbo)
 {
-	glDeleteBuffersARB(1,&vbo_map);
-	glDeleteBuffersARB(1,&vbo_map_index);
-
-	glDeleteBuffersARB(1,&vbo_liquid);
-	glDeleteBuffersARB(1,&vbo_liquid_index);
-
-	glDeleteBuffersARB(1,&vbo_sky);
-
-	glDeleteBuffersARB(view_vertex_object_count,vbo_cache);
-	glDeleteBuffersARB(view_vertex_object_count,vbo_cache_index);
+	glDeleteBuffers(1,&vbo->vertex);
+	glDeleteBuffers(1,&vbo->index);
 }
 
-/* =======================================================
-
-      Map VBOs
-      
-======================================================= */
-
-void view_init_map_vertex_object(int sz)
+void view_bind_mesh_liquid_vertex_object(map_vbo_type *vbo)
 {
-		// create map geometery buffer
-
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,vbo_map);
-
-	sz*=sizeof(float);
-	glBufferDataARB(GL_ARRAY_BUFFER_ARB,sz,NULL,GL_DYNAMIC_DRAW_ARB);
-
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
+	glBindBuffer(GL_ARRAY_BUFFER,vbo->vertex);
 }
 
-inline float* view_bind_map_map_vertex_object(void)
+unsigned char* view_map_mesh_liquid_vertex_object(map_vbo_type *vbo)
 {
-	float		*vertex_ptr;
-
-		// bind to map specific VBO
-
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,vbo_map);
-
-		// map pointer
-
-	vertex_ptr=(float*)glMapBufferARB(GL_ARRAY_BUFFER_ARB,GL_WRITE_ONLY_ARB);
-	if (vertex_ptr==NULL) {
-		glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
-		return(NULL);
-	}
-
-	return(vertex_ptr);
+	return((unsigned char*)glMapBuffer(GL_ARRAY_BUFFER,GL_WRITE_ONLY));
 }
 
-inline void view_bind_map_vertex_object(void)
+void view_unmap_mesh_liquid_vertex_object(void)
 {
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,vbo_map);
+	glUnmapBuffer(GL_ARRAY_BUFFER);
 }
 
-inline void view_unmap_map_vertex_object(void)
+void view_unbind_mesh_liquid_vertex_object(void)
 {
-	glUnmapBufferARB(GL_ARRAY_BUFFER_ARB);
+	glBindBuffer(GL_ARRAY_BUFFER,0);
 }
 
-inline void view_unbind_map_vertex_object(void)
+void view_bind_mesh_liquid_index_object(map_vbo_type *vbo)
 {
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,vbo->index);
 }
 
-void view_init_map_index_object(int sz)
+unsigned short* view_map_mesh_liquid_index_object(void)
 {
-		// create map index buffer
-
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,vbo_map_index);
-
-	sz*=sizeof(unsigned int);
-	glBufferDataARB(GL_ELEMENT_ARRAY_BUFFER_ARB,sz,NULL,GL_STATIC_DRAW_ARB);
-
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,0);
+	return((unsigned short*)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER,GL_WRITE_ONLY));
 }
 
-inline unsigned int* view_bind_map_map_index_object(void)
+void view_unmap_mesh_liquid_index_object(void)
 {
-	unsigned int		*index_ptr;
-
-		// bind to map specific VBO
-
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,vbo_map_index);
-
-		// map pointer
-
-	index_ptr=(unsigned int*)glMapBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,GL_WRITE_ONLY_ARB);
-	if (index_ptr==NULL) {
-		glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,0);
-		return(NULL);
-	}
-
-	return(index_ptr);
+	glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 }
 
-inline void view_bind_map_index_object(void)
+void view_unbind_mesh_liquid_index_object(void)
 {
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,vbo_map_index);
-}
-
-inline void view_unmap_map_index_object(void)
-{
-	glUnmapBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB);
-}
-
-inline void view_unbind_map_index_object(void)
-{
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
 }
 
 /* =======================================================
 
-      Liquid VBOs
+      Model VBOs
       
 ======================================================= */
 
-void view_init_liquid_vertex_object(int sz)
+void view_create_model_vertex_object(model_draw *draw)
 {
-		// create liquid geometery buffer
+	int					n,k,t,vertex_cnt,stride;
+	model_type			*mdl;
+	model_mesh_type		*mesh;
+	model_poly_type		*poly;
+	
+		// each mesh has own VBO
+		
+	mdl=server.model_list.models[draw->model_idx];
 
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,vbo_liquid);
+	for (n=0;n!=mdl->nmesh;n++) {
+		glGenBuffers(1,&draw->vbo[n].vertex);
+		
+			// get the vertex count
+			
+		mesh=&mdl->meshes[n];
+		
+		vertex_cnt=0;
+		poly=mesh->polys;
+		
+		for (k=0;k!=mesh->npoly;k++) {
+			vertex_cnt+=poly->ptsz;
+			poly++;
+		}
+			
+			// get the model vertex size
+			
+		stride=(3+2+3+3)*sizeof(float);					// 3 vertex, 2 uv, 3 tangent, 3 normal
 
-	sz*=sizeof(float);
-	glBufferDataARB(GL_ARRAY_BUFFER_ARB,sz,NULL,GL_DYNAMIC_DRAW_ARB);
+			// init the vertex buffer
 
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
-}
+		draw->vbo[n].vertex_count=vertex_cnt;
+		draw->vbo[n].vertex_stride=stride;
+		draw->vbo[n].vertex_mem_sz=(stride*vertex_cnt);
 
-inline float* view_bind_map_liquid_vertex_object(void)
-{
-	float		*vertex_ptr;
+		glBindBuffer(GL_ARRAY_BUFFER,draw->vbo[n].vertex);
+		glBufferData(GL_ARRAY_BUFFER,draw->vbo[n].vertex_mem_sz,NULL,GL_DYNAMIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER,0);
 
-		// bind to liquid specific VBO
+			// any shadows?
 
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,vbo_liquid);
+		if (!draw->shadow.on) continue;
+		
+			// shadows have multiple vertexes
+			// so we don't have blocking problems
+			
+		draw->vbo[n].shadow_current_idx=0;
+		draw->vbo[n].shadow_vertex_mem_sz=((3*sizeof(float))*vertex_cnt);
+		
+		for (t=0;t!=max_model_shadow_vbo_count;t++) {
+			glGenBuffers(1,&draw->vbo[n].shadow_vertexes[t]);
 
-		// map pointer
-
-	vertex_ptr=(float*)glMapBufferARB(GL_ARRAY_BUFFER_ARB,GL_WRITE_ONLY_ARB);
-	if (vertex_ptr==NULL) {
-		glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
-		return(NULL);
+			glBindBuffer(GL_ARRAY_BUFFER,draw->vbo[n].shadow_vertexes[t]);
+			glBufferData(GL_ARRAY_BUFFER,draw->vbo[n].shadow_vertex_mem_sz,NULL,GL_DYNAMIC_DRAW);
+			glBindBuffer(GL_ARRAY_BUFFER,0);
+		}
 	}
-
-	return(vertex_ptr);
 }
 
-inline void view_unmap_liquid_vertex_object(void)
+void view_dispose_model_vertex_object(model_draw *draw)
 {
-	glUnmapBufferARB(GL_ARRAY_BUFFER_ARB);
-}
+	int					n,t;
+	model_type			*mdl;
+	
+		// each mesh has own VBO
+		
+	mdl=server.model_list.models[draw->model_idx];
 
-inline void view_unbind_liquid_vertex_object(void)
-{
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
-}
-
-void view_init_liquid_index_object(int sz)
-{
-		// create liquid index buffer
-
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,vbo_liquid_index);
-
-	sz*=sizeof(unsigned int);
-	glBufferDataARB(GL_ELEMENT_ARRAY_BUFFER_ARB,sz,NULL,GL_DYNAMIC_DRAW_ARB);
-
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,0);
-}
-
-inline unsigned int* view_bind_map_liquid_index_object(void)
-{
-	unsigned int		*index_ptr;
-
-		// bind to liquid specific VBO
-
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,vbo_liquid_index);
-
-		// map pointer
-
-	index_ptr=(unsigned int*)glMapBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,GL_WRITE_ONLY_ARB);
-	if (index_ptr==NULL) {
-		glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,0);
-		return(NULL);
+	for (n=0;n!=mdl->nmesh;n++) {
+	
+			// model vertexes
+			
+		glDeleteBuffers(1,&draw->vbo[n].vertex);
+		if (!draw->shadow.on) continue;
+		
+			// shadow vertexes
+		
+		for (t=0;t!=max_model_shadow_vbo_count;t++) {
+			glDeleteBuffers(1,&draw->vbo[n].shadow_vertexes[t]);
+		}
 	}
-
-	return(index_ptr);
 }
 
-inline void view_unmap_liquid_index_object(void)
+void view_bind_model_vertex_object(model_draw *draw,int mesh_idx)
 {
-	glUnmapBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB);
+	glBindBuffer(GL_ARRAY_BUFFER,draw->vbo[mesh_idx].vertex);
 }
 
-inline void view_unbind_liquid_index_object(void)
+unsigned char* view_map_model_vertex_object(void)
 {
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,0);
+	return((unsigned char*)glMapBuffer(GL_ARRAY_BUFFER,GL_WRITE_ONLY));
+}
+
+void view_unmap_model_vertex_object(void)
+{
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+}
+
+void view_unbind_model_vertex_object(void)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,0);
+}
+
+void view_bind_model_shadow_vertex_object(model_draw *draw,int mesh_idx)
+{
+		// bind current shadow vertex
+		
+	glBindBuffer(GL_ARRAY_BUFFER,draw->vbo[mesh_idx].shadow_vertexes[draw->vbo[mesh_idx].shadow_current_idx]);
+	
+		// and use the next one next time
+		
+	draw->vbo[mesh_idx].shadow_current_idx++;
+	if (draw->vbo[mesh_idx].shadow_current_idx==max_model_shadow_vbo_count) draw->vbo[mesh_idx].shadow_current_idx=0;
+}
+
+unsigned char* view_map_model_shadow_vertex_object(void)
+{
+	return((unsigned char*)glMapBuffer(GL_ARRAY_BUFFER,GL_WRITE_ONLY));
+}
+
+void view_unmap_model_shadow_vertex_object(void)
+{
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+}
+
+void view_unbind_model_shadow_vertex_object(void)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,0);
 }
 
 /* =======================================================
@@ -291,427 +262,334 @@ inline void view_unbind_liquid_index_object(void)
       
 ======================================================= */
 
-void view_init_sky_vertex_object(int sz)
+void view_create_sky_vertex_object(int vertex_mem_sz)
 {
-		// create sky geometery buffer
+	glGenBuffers(1,&vbo_sky);
 
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,vbo_sky);
-
-	sz*=sizeof(float);
-	glBufferDataARB(GL_ARRAY_BUFFER_ARB,sz,NULL,GL_DYNAMIC_DRAW_ARB);
-
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
+	glBindBuffer(GL_ARRAY_BUFFER,vbo_sky);
+	glBufferData(GL_ARRAY_BUFFER,vertex_mem_sz,NULL,GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER,0);
 }
 
-inline float* view_bind_map_sky_vertex_object(void)
+void view_dispose_sky_vertex_object(void)
 {
-	float		*vertex_ptr;
-
-		// bind to sky specific VBO
-
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,vbo_sky);
-
-		// map pointer
-
-	vertex_ptr=(float*)glMapBufferARB(GL_ARRAY_BUFFER_ARB,GL_WRITE_ONLY_ARB);
-	if (vertex_ptr==NULL) {
-		glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
-		return(NULL);
-	}
-
-	return(vertex_ptr);
+	glDeleteBuffers(1,&vbo_sky);
 }
 
-inline void view_bind_sky_vertex_object(void)
+void view_bind_sky_vertex_object(void)
 {
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,vbo_sky);
+	glBindBuffer(GL_ARRAY_BUFFER,vbo_sky);
 }
 
-inline void view_unmap_sky_vertex_object(void)
+unsigned char* view_map_sky_vertex_object(void)
 {
-	glUnmapBufferARB(GL_ARRAY_BUFFER_ARB);
+	return((unsigned char*)glMapBuffer(GL_ARRAY_BUFFER,GL_WRITE_ONLY));
 }
 
-inline void view_unbind_sky_vertex_object(void)
+void view_unmap_sky_vertex_object(void)
 {
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+}
+
+void view_unbind_sky_vertex_object(void)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,0);
 }
 
 /* =======================================================
 
-      Model, Particle, Etc VBOs
+      Fog VBOs
       
 ======================================================= */
 
-float* view_bind_map_next_vertex_object(int sz)
+void view_create_fog_vertex_object(int vertex_mem_sz)
 {
-	float			*vertex_ptr;
+	glGenBuffers(1,&vbo_fog);
 
-		// bind it
-
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,vbo_cache[cur_vbo_cache_idx]);
-
-		// resize it if more memory needed
-		// we only grow up, this *might* be a problem
-		// but it seems more optimal for now.  Will require
-		// more testing
-
-		// size is in floats
-
-	sz*=sizeof(float);
-
-	if (sz>vbo_cache_sz[cur_vbo_cache_idx]) {
-
-			// we need to grab the pointer first so if the data
-			// is still being used then we'll be stalled
-
-		if (vbo_cache_sz[cur_vbo_cache_idx]!=-1) {
-			vertex_ptr=(float*)glMapBufferARB(GL_ARRAY_BUFFER_ARB,GL_WRITE_ONLY_ARB);
-			glUnmapBufferARB(GL_ARRAY_BUFFER_ARB);
-		}
-
-			// now we can change the size
-
-		vbo_cache_sz[cur_vbo_cache_idx]=sz;
-		glBufferDataARB(GL_ARRAY_BUFFER_ARB,sz,NULL,GL_STREAM_DRAW_ARB);
-	}
-
-		// map pointer
-
-	vertex_ptr=(float*)glMapBufferARB(GL_ARRAY_BUFFER_ARB,GL_WRITE_ONLY_ARB);
-	if (vertex_ptr==NULL) {
-		glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
-		return(NULL);
-	}
-
-		// get next object
-
-	cur_vbo_cache_idx++;
-	if (cur_vbo_cache_idx==view_vertex_object_count) cur_vbo_cache_idx=0;
-
-	return(vertex_ptr);
+	glBindBuffer(GL_ARRAY_BUFFER,vbo_fog);
+	glBufferData(GL_ARRAY_BUFFER,vertex_mem_sz,NULL,GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER,0);
 }
 
-inline void view_unmap_current_vertex_object(void)
+void view_dispose_fog_vertex_object(void)
 {
-	glUnmapBufferARB(GL_ARRAY_BUFFER_ARB);
+	glDeleteBuffers(1,&vbo_fog);
 }
 
-inline void view_unbind_current_vertex_object(void)
+void view_bind_fog_vertex_object(void)
 {
-	glBindBufferARB(GL_ARRAY_BUFFER_ARB,0);
+	glBindBuffer(GL_ARRAY_BUFFER,vbo_fog);
 }
 
-unsigned short* view_bind_map_next_index_object(int sz)
+unsigned char* view_map_fog_vertex_object(void)
 {
-	unsigned short		*index_ptr;
-
-		// bind it
-
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,vbo_cache_index[cur_vbo_cache_index_idx]);
-
-		// size is in unsigned short
-
-	sz*=sizeof(unsigned short);
-
-	if (sz>vbo_cache_index_sz[cur_vbo_cache_index_idx]) {
-
-			// we need to grab the pointer first so if the data
-			// is still being used then we'll be stalled
-
-		if (vbo_cache_index_sz[cur_vbo_cache_index_idx]!=-1) {
-			index_ptr=(unsigned short*)glMapBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,GL_WRITE_ONLY_ARB);
-			glUnmapBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB);
-		}
-
-			// now we can change the size
-
-		vbo_cache_index_sz[cur_vbo_cache_index_idx]=sz;
-		glBufferDataARB(GL_ELEMENT_ARRAY_BUFFER_ARB,sz,NULL,GL_STREAM_DRAW_ARB);
-	}
-
-		// map pointer
-
-	index_ptr=(unsigned short*)glMapBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,GL_WRITE_ONLY_ARB);
-	if (index_ptr==NULL) {
-		glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,0);
-		return(NULL);
-	}
-
-		// get next object
-
-	cur_vbo_cache_index_idx++;
-	if (cur_vbo_cache_index_idx==view_vertex_object_count) cur_vbo_cache_index_idx=0;
-
-	return(index_ptr);
+	return((unsigned char*)glMapBuffer(GL_ARRAY_BUFFER,GL_WRITE_ONLY));
 }
 
-inline void view_unmap_current_index_object(void)
+void view_unmap_fog_vertex_object(void)
 {
-	glUnmapBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB);
+	glUnmapBuffer(GL_ARRAY_BUFFER);
 }
 
-inline void view_unbind_current_index_object(void)
+void view_unbind_fog_vertex_object(void)
 {
-	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB,0);
+	glBindBuffer(GL_ARRAY_BUFFER,0);
 }
 
 /* =======================================================
 
-      Some VBO Utility Routines
+      Rain VBOs
       
 ======================================================= */
 
-void view_draw_next_vertex_object_2D_texture_screen(int wid,int high,float gx,float gy)
+void view_create_rain_vertex_object(int vertex_mem_sz)
 {
-	float			*vertex_ptr,*uv_ptr;
+	glGenBuffers(1,&vbo_rain);
 
-	vertex_ptr=view_bind_map_next_vertex_object(4*(2+2));
-	if (vertex_ptr==NULL) return;
-
-	uv_ptr=vertex_ptr+(4*2);
-
-		// get the vertexes
-
-	*vertex_ptr++=0.0f;
-	*vertex_ptr++=0.0f;
-
-	*uv_ptr++=gx;
-	*uv_ptr++=gy;
-
-	*vertex_ptr++=(float)wid;
-	*vertex_ptr++=0.0f;
-
-	*uv_ptr++=gx+1.0f;
-	*uv_ptr++=gy;
-
-	*vertex_ptr++=(float)wid;
-	*vertex_ptr++=(float)high;
-
-	*uv_ptr++=gx+1.0f;
-	*uv_ptr++=gy+1.0f;
-
-	*vertex_ptr++=0.0f;
-	*vertex_ptr++=(float)high;
-
-	*uv_ptr++=gx;
-	*uv_ptr++=gy+1.0f;
-
-  	view_unmap_current_vertex_object();
-
-		// draw the quad
-
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(2,GL_FLOAT,0,(void*)0);
-
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)((4*2)*sizeof(float)));
-
-	glDrawArrays(GL_QUADS,0,4);
-
- 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
-
-		// unbind the vbo
-
-	view_unbind_current_vertex_object();
+	glBindBuffer(GL_ARRAY_BUFFER,vbo_rain);
+	glBufferData(GL_ARRAY_BUFFER,vertex_mem_sz,NULL,GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER,0);
 }
 
-void view_draw_next_vertex_object_2D_tint_screen(void)
+void view_dispose_rain_vertex_object(void)
 {
-	float			*vertex_ptr;
-
-	vertex_ptr=view_bind_map_next_vertex_object(4*2);
-	if (vertex_ptr==NULL) return;
-
-		// get the vertexes
-
-	*vertex_ptr++=0.0f;
-	*vertex_ptr++=0.0f;
-
-	*vertex_ptr++=(float)setup.screen.x_sz;
-	*vertex_ptr++=0.0f;
-
-	*vertex_ptr++=(float)setup.screen.x_sz;
-	*vertex_ptr++=(float)setup.screen.y_sz;
-
-	*vertex_ptr++=0.0f;
-	*vertex_ptr++=(float)setup.screen.y_sz;
-
-  	view_unmap_current_vertex_object();
-
-		// draw the quad
-
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(2,GL_FLOAT,0,(void*)0);
-
-	glDrawArrays(GL_QUADS,0,4);
-
-	glDisableClientState(GL_VERTEX_ARRAY);
-
-		// unbind the vbo
-
-	view_unbind_current_vertex_object();
+	glDeleteBuffers(1,&vbo_rain);
 }
 
-void view_draw_next_vertex_object_2D_texture_quad(int lft,int rgt,int top,int bot)
+void view_bind_rain_vertex_object(void)
 {
-	float			*vertex_ptr,*uv_ptr;
-
-	vertex_ptr=view_bind_map_next_vertex_object(4*(2+2));
-	if (vertex_ptr==NULL) return;
-
-	uv_ptr=vertex_ptr+(4*2);
-
-		// get the vertexes
-
-	*vertex_ptr++=(float)lft;
-	*vertex_ptr++=(float)top;
-
-	*uv_ptr++=0.0f;
-	*uv_ptr++=0.0f;
-
-	*vertex_ptr++=(float)rgt;
-	*vertex_ptr++=(float)top;
-
-	*uv_ptr++=1.0f;
-	*uv_ptr++=0.0f;
-
-	*vertex_ptr++=(float)rgt;
-	*vertex_ptr++=(float)bot;
-
-	*uv_ptr++=1.0f;
-	*uv_ptr++=1.0f;
-
-	*vertex_ptr++=(float)lft;
-	*vertex_ptr++=(float)bot;
-
-	*uv_ptr++=0.0f;
-	*uv_ptr++=1.0f;
-
-  	view_unmap_current_vertex_object();
-
-		// draw the quad
-
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(2,GL_FLOAT,0,(void*)0);
-
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glTexCoordPointer(2,GL_FLOAT,0,(void*)((4*2)*sizeof(float)));
-
-	glDrawArrays(GL_QUADS,0,4);
-
- 	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
-
-		// unbind the vbo
-
-	view_unbind_current_vertex_object();
+	glBindBuffer(GL_ARRAY_BUFFER,vbo_rain);
 }
 
-void view_draw_next_vertex_object_2D_color_quad(int x0,int y0,d3col *col0,int x1,int y1,d3col *col1,int x2,int y2,d3col *col2,int x3,int y3,d3col *col3,float alpha)
+unsigned char* view_map_rain_vertex_object(void)
 {
-	float			*vertex_ptr,*col_ptr;
+	return((unsigned char*)glMapBuffer(GL_ARRAY_BUFFER,GL_WRITE_ONLY));
+}
 
-	vertex_ptr=view_bind_map_next_vertex_object(4*(2+4));
-	if (vertex_ptr==NULL) return;
+void view_unmap_rain_vertex_object(void)
+{
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+}
 
-	col_ptr=vertex_ptr+(4*2);
+void view_unbind_rain_vertex_object(void)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,0);
+}
 
-		// get the vertexes
+/* =======================================================
 
-	*vertex_ptr++=(float)x0;
-	*vertex_ptr++=(float)y0;
+      Effect VBOs
 
-	*col_ptr++=col0->r;
-	*col_ptr++=col0->g;
-	*col_ptr++=col0->b;
-	*col_ptr++=alpha;
+	  Effect VBOs are the only VBOs that are dynamic
+	  so we need a flag to tell if they are active so
+	  we can clean them up later
+      
+======================================================= */
 
-	*vertex_ptr++=(float)x1;
-	*vertex_ptr++=(float)y1;
+void view_clear_effect_vertex_object(effect_type *effect)
+{
+	effect->vbo.active=FALSE;
+}
 
-	*col_ptr++=col1->r;
-	*col_ptr++=col1->g;
-	*col_ptr++=col1->b;
-	*col_ptr++=alpha;
+void view_create_effect_vertex_object(effect_type *effect,int vertex_mem_sz,int index_mem_sz)
+{
+		// is it already active?
 
-	*vertex_ptr++=(float)x2;
-	*vertex_ptr++=(float)y2;
+	if (effect->vbo.active) return;
 
-	*col_ptr++=col2->r;
-	*col_ptr++=col2->g;
-	*col_ptr++=col2->b;
-	*col_ptr++=alpha;
+		// mark VBO as active
 
-	*vertex_ptr++=(float)x3;
-	*vertex_ptr++=(float)y3;
+	effect->vbo.active=TRUE;
 
-	*col_ptr++=col3->r;
-	*col_ptr++=col3->g;
-	*col_ptr++=col3->b;
-	*col_ptr++=alpha;
+		// create the vertex buffer
 
-  	view_unmap_current_vertex_object();
+	glGenBuffers(1,&effect->vbo.vertex);
 
-		// draw the quad
-		
-	if (alpha!=1.0f) {
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+	effect->vbo.vertex_mem_sz=vertex_mem_sz;
+
+	glBindBuffer(GL_ARRAY_BUFFER,effect->vbo.vertex);
+	glBufferData(GL_ARRAY_BUFFER,vertex_mem_sz,NULL,GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER,0);
+
+		// is there an index buffer?
+
+	if (index_mem_sz==-1) {
+		effect->vbo.index_mem_sz=-1;
+		return;
 	}
 
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(2,GL_FLOAT,0,(void*)0);
+		// init the index buffer
 
-	glEnableClientState(GL_COLOR_ARRAY);
-	glColorPointer(4,GL_FLOAT,0,(void*)((4*2)*sizeof(float)));
+	glGenBuffers(1,&effect->vbo.index);
 
-	glDrawArrays(GL_QUADS,0,4);
+	effect->vbo.index_mem_sz=index_mem_sz;
 
- 	glDisableClientState(GL_COLOR_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,effect->vbo.index);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,index_mem_sz,NULL,GL_STATIC_DRAW);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
+}
+
+void view_dispose_effect_vertex_object(effect_type *effect)
+{
+		// is it already disposed?
+
+	if (!effect->vbo.active) return;
+
+		// dispose vertex
+
+	effect->vbo.active=FALSE;
+	glDeleteBuffers(1,&effect->vbo.vertex);
+
+		// dispose index
+
+	if (effect->vbo.index_mem_sz!=-1) glDeleteBuffers(1,&effect->vbo.index);
+}
+
+void view_bind_effect_vertex_object(effect_type *effect)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,effect->vbo.vertex);
+}
+
+unsigned char* view_map_effect_vertex_object(void)
+{
+	return((unsigned char*)glMapBuffer(GL_ARRAY_BUFFER,GL_WRITE_ONLY));
+}
+
+void view_unmap_effect_vertex_object(void)
+{
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+}
+
+void view_unbind_effect_vertex_object(void)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,0);
+}
+
+void view_bind_effect_index_object(effect_type *effect)
+{
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,effect->vbo.index);
+}
+
+unsigned short* view_map_effect_index_object(void)
+{
+	return((unsigned short*)glMapBuffer(GL_ELEMENT_ARRAY_BUFFER,GL_WRITE_ONLY));
+}
+
+void view_unmap_effect_index_object(void)
+{
+	glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
+}
+
+void view_unbind_effect_index_object(void)
+{
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
+}
+
+/* =======================================================
+
+      Text VBOs
+      
+======================================================= */
+
+void view_create_text_vertex_object(void)
+{
+	int			n,vertex_mem_sz;
 	
-	glDisable(GL_BLEND);
+	glGenBuffers(view_vbo_text_count,vbo_text);
+	
+	vertex_mem_sz=(1024*(2+2))*sizeof(float);
 
-		// unbind the vbo
-
-	view_unbind_current_vertex_object();
+	for (n=0;n!=view_vbo_text_count;n++) {
+		glBindBuffer(GL_ARRAY_BUFFER,vbo_text[n]);
+		glBufferData(GL_ARRAY_BUFFER,vertex_mem_sz,NULL,GL_DYNAMIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER,0);
+	}
+	
+	vbo_text_index=0;
 }
 
-void view_draw_next_vertex_object_2D_line_quad(int lft,int rgt,int top,int bot)
+void view_dispose_text_vertex_object(void)
 {
-	float			*vertex_ptr;
+	glDeleteBuffers(view_vbo_text_count,vbo_text);
+}
 
-	vertex_ptr=view_bind_map_next_vertex_object(4*2);
-	if (vertex_ptr==NULL) return;
+void view_bind_text_vertex_object(void)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,vbo_text[vbo_text_index]);
+	
+	vbo_text_index++;
+	if (vbo_text_index==view_vbo_text_count) vbo_text_index=0;
+}
 
-		// get the vertexes
+unsigned char* view_map_text_vertex_object(void)
+{
+	return((unsigned char*)glMapBuffer(GL_ARRAY_BUFFER,GL_WRITE_ONLY));
+}
 
-	*vertex_ptr++=(float)lft;
-	*vertex_ptr++=(float)top;
+void view_unmap_text_vertex_object(void)
+{
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+}
 
-	*vertex_ptr++=(float)rgt;
-	*vertex_ptr++=(float)top;
+void view_unbind_text_vertex_object(void)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,0);
+}
 
-	*vertex_ptr++=(float)rgt;
-	*vertex_ptr++=(float)bot;
+/* =======================================================
 
-	*vertex_ptr++=(float)lft;
-	*vertex_ptr++=(float)bot;
+      Utility VBOs
+      
+======================================================= */
 
-  	view_unmap_current_vertex_object();
+void view_initialize_utility_vertex_object(void)
+{
+	vbo_utility_init=FALSE;
+}
 
-		// draw the quad
-		
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glVertexPointer(2,GL_FLOAT,0,(void*)0);
+void view_create_utility_vertex_object(void)
+{
+	int			n,vertex_mem_sz;
+	
+	glGenBuffers(view_vbo_utility_count,vbo_utility);
+	
+	vertex_mem_sz=((128*(3+2))*sizeof(float))+((128*4)*sizeof(unsigned char));		// possibly up to 128 vertexes, uvs, colors
 
-	glDrawArrays(GL_LINE_LOOP,0,4);
+	for (n=0;n!=view_vbo_utility_count;n++) {
+		glBindBuffer(GL_ARRAY_BUFFER,vbo_utility[n]);
+		glBufferData(GL_ARRAY_BUFFER,vertex_mem_sz,NULL,GL_DYNAMIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER,0);
+	}
+	
+	vbo_utility_index=0;
+	
+	vbo_utility_init=TRUE;
+}
 
-	glDisableClientState(GL_VERTEX_ARRAY);
+void view_dispose_utility_vertex_object(void)
+{
+	if (vbo_utility_init) glDeleteBuffers(view_vbo_utility_count,vbo_utility);
+}
 
-		// unbind the vbo
+void view_bind_utility_vertex_object(void)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,vbo_utility[vbo_utility_index]);
+	
+	vbo_utility_index++;
+	if (vbo_utility_index==view_vbo_utility_count) vbo_utility_index=0;
+}
 
-	view_unbind_current_vertex_object();
+unsigned char* view_map_utility_vertex_object(void)
+{
+	return((unsigned char*)glMapBuffer(GL_ARRAY_BUFFER,GL_WRITE_ONLY));
+}
+
+void view_unmap_utility_vertex_object(void)
+{
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+}
+
+void view_unbind_utility_vertex_object(void)
+{
+	glBindBuffer(GL_ARRAY_BUFFER,0);
 }

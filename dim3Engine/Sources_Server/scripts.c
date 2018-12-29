@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,24 +29,13 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "scripts.h"
-#include "consoles.h"
+
+extern bool					scripts_event_lock;
 
 extern js_type				js;
 extern setup_type			setup;
-
-JSClass			dim3_class={"dim3_class",0,
-							JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,JS_PropertyStub,
-							JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub,JS_FinalizeStub};
-
-JSBool scripts_gc_reporter(JSContext *cx,JSGCStatus status);		// forward reference
-
-//
-// NOTE: Scripts aren't like other objects which have a list that is compressed as objects
-// are deleted from it.  SpiderMonkey requires rooting, which requires a pointer.  The pointers
-// must remain correct otherwise spidermonkey will crash.  Therefore, the script list can never
-// be changed while other scripts are live.
-//
 
 /* =======================================================
 
@@ -56,53 +45,32 @@ JSBool scripts_gc_reporter(JSContext *cx,JSGCStatus status);		// forward referen
 
 bool scripts_engine_initialize(char *err_str)
 {
-	js.rt=NULL;
-	js.cx=NULL;
-	
+		// initialize classes
+
 	script_initialize_classes();
-	
-		// create runtime
-		
-	js.rt=JS_NewRuntime(js_script_memory_size);
-	if (js.rt==NULL) {
-		strcpy(err_str,"JavaScript Engine: Not enough memory to create Script RunTime");
-		return(FALSE);
-	}
-	
-		// create context
-		
-	js.cx=JS_NewContext(js.rt,10240);
-	if (js.cx==NULL) {
-		strcpy(err_str,"JavaScript Engine: Not enough memory to create Script Context");
-		return(FALSE);
-	}
-	
-		// set context options
-		
-	JS_SetOptions(js.cx,JS_GetOptions(js.cx)|JSOPTION_STRICT|JSOPTION_VAROBJFIX|JSOPTION_WERROR);
-	
-		// error reporter
-		
-	JS_SetErrorReporter(js.cx,scripts_catch_errors);
-	
-		// get a message for garbage collection
-		
-	// JS_SetGCCallback(js.cx,scripts_gc_reporter);		// supergumba -- for testing
-	
+
 		// load up the define file
 		
 	script_load_user_defines();
+
+		// create a group for contexts
+		// so they can share objects
+
+	js.cx_group=JSContextGroupCreate();
+
+		// current events are not locked out
+
+	scripts_event_lock=FALSE;
 	
 	return(TRUE);
 }
 
 void scripts_engine_shutdown(void)
 {
+	JSContextGroupRelease(js.cx_group);
+
 	script_free_user_defines();
 	script_release_classes();
-	
-	if (js.cx!=NULL) JS_DestroyContext(js.cx);
-	if (js.rt!=NULL) JS_DestroyRuntime(js.rt);
 }
 
 /* =======================================================
@@ -111,179 +79,22 @@ void scripts_engine_shutdown(void)
       
 ======================================================= */
 
-void scripts_initialize(void)
+void scripts_initialize_list(void)
 {
 	int			n;
-	script_type	*script;
 	
-		// current uid
-		
-	js.script_current_uid=0;
-	
-		// no scripts slots used
-		
-	script=js.scripts;
-	
-	for (n=0;n!=max_scripts;n++) {
-		script->used=FALSE;
-		script++;
+	for (n=0;n!=max_script_list;n++) {
+		js.script_list.scripts[n]=NULL;
 	}
 }
 
-/* =======================================================
-
-      Find Scripts
-      
-======================================================= */
-
-int scripts_find_free(void)
+void scripts_free_list(void)
 {
-	int				n;
-	script_type		*script;
+	int			n;
 	
-	script=js.scripts;
-	
-	for (n=0;n!=max_scripts;n++) {
-		if (!script->used) return(n);
-		script++;
+	for (n=0;n!=max_script_list;n++) {
+		if (js.script_list.scripts[n]!=NULL) free(js.script_list.scripts[n]);
 	}
-	
-	return(-1);
-}
-
-int scripts_find_uid(int uid)
-{
-	int				n;
-	script_type		*script;
-	
-	script=js.scripts;
-	
-	for (n=0;n!=max_scripts;n++) {
-		if ((script->used) && (script->uid==uid)) return(n);
-		script++;
-	}
-	
-	return(-1);
-}
-
-/* =======================================================
-
-      Script Roots
-      
-======================================================= */
-
-void script_add_roots(script_type *script)
-{
-	JS_AddRoot(js.cx,&script->global);
-	JS_AddRoot(js.cx,&script->obj);
-}
-
-void script_remove_roots(script_type *script)
-{
-	JS_RemoveRoot(js.cx,&script->global);
-	JS_RemoveRoot(js.cx,&script->obj);
-}
-
-void scripts_clean_up_roots(void)
-{
-	JS_GC(js.cx);
-}
-
-JSBool scripts_gc_reporter(JSContext *cx,JSGCStatus status)
-{
-	switch (status) {
-		case JSGC_BEGIN:
-			console_add_system("JS Garbage Collection: Begin");
-			break;
-		case JSGC_END:
-			console_add_system("JS Garbage Collection: End");
-			break;
-		case JSGC_MARK_END:
-			console_add_system("JS Garbage Collection: Mark End");
-			break;
-		case JSGC_FINALIZE_END:
-			console_add_system("JS Garbage Collection: Finalize End");
-			break;
-	}
-			
-	return(JSVAL_TRUE);
-}
-
-/* =======================================================
-
-      Errors
-      
-======================================================= */
-
-void scripts_clear_last_error(void)
-{
-	js.last_error_str[0]=0x0;
-}
-
-void scripts_catch_errors(JSContext *cx,const char *message,JSErrorReport *report)
-{
-	int				idx;
-	script_type		*script;
-	
-		// find script for error
-		
-	idx=scripts_find_uid(js.attach.script_uid);
-	if (idx==-1) return;
-	
-	script=&js.scripts[idx];
-	
-		// create error
-		
-	snprintf(js.last_error_str,256,"JS Error [%s]\n%d: %s",script->name,report->lineno,message);
-	js.last_error_str[255]=0x0;
-}
-
-void scripts_get_last_error(char *err_str)
-{
-	int				idx;
-	script_type		*script;
-	jsval			eval;
-	JSString		*jstr;
-	JSErrorReport	*report;
-	
-		// did we catch an error?
-		
-	if (js.last_error_str[0]!=0x0) {
-		strcpy(err_str,js.last_error_str);
-		return;
-	}
-	
-		// find script for error
-		
-	idx=scripts_find_uid(js.attach.script_uid);
-	if (idx==-1) {
-		strcpy(err_str,"JS Error [?]\nUnknown Error");
-		return;
-	}
-	
-	script=&js.scripts[idx];
-	
-		// check for pending exceptions
-		
-	if (!JS_GetPendingException(js.cx,&eval)) {
-		eval=JSVAL_NULL;
-	}
-	
-		// no error?
-		
-	if (eval==JSVAL_NULL) {
-		snprintf(err_str,256,"JS Error [%s]\nUnknown Error",script->name);
-		return;
-	}
-	
-		// create error from exception
-	
-	report=JS_ErrorFromException(js.cx,eval);
-	
-	jstr=JS_NewUCStringCopyZ(js.cx,report->ucmessage);	// use the engine to convert the uchar to char
-	
-	snprintf(err_str,256,"JS Error [%s]\n%d: %s",script->name,report->lineno,JS_GetStringBytes(jstr));
-	err_str[255]=0x0;
 }
 
 /* =======================================================
@@ -292,16 +103,38 @@ void scripts_get_last_error(char *err_str)
       
 ======================================================= */
 
-void scripts_clear_attach_data(attach_type *attach)
+void scripts_setup_data(script_type *script,int thing_type,int obj_idx,int weap_idx,int proj_setup_idx)
 {
 	int				n;
 
-	for (n=0;n!=max_msg_data;n++) {
-		attach->set_msg_data[n].type=d3_jsval_type_int;
-		attach->set_msg_data[n].data.d3_int=0;
-		attach->get_msg_data[n].type=d3_jsval_type_int;
-		attach->get_msg_data[n].data.d3_int=0;
+		// clear attached event list
+
+	for (n=0;n!=event_main_id_count;n++) {
+		script->event_attach_list.func[n]=NULL;
 	}
+
+		// setup recursion checks
+
+	script->recursive.count=0;
+
+	for (n=0;n!=event_main_id_count;n++) {
+		script->recursive.in_event[n]=FALSE;
+	}
+
+		// attachment
+
+	script->attach.thing_type=thing_type;
+	script->attach.obj_idx=obj_idx;
+	script->attach.weap_idx=weap_idx;
+	script->attach.proj_setup_idx=proj_setup_idx;
+	script->attach.proj_idx=-1;
+
+		// event state
+		
+	script->event_state.main_event=-1;
+	script->event_state.sub_event=-1;
+	script->event_state.id=0;
+	script->event_state.tick=0;
 }
 
 /* =======================================================
@@ -310,28 +143,38 @@ void scripts_clear_attach_data(attach_type *attach)
       
 ======================================================= */
 
-bool scripts_execute(attach_type *attach,script_type *script,char *err_str)
+bool scripts_execute(script_type *script,char *err_str)
 {
-	jsval			rval;
+	JSStringRef		j_script_data,j_script_name;
+	JSValueRef		rval,exception;
 	
-		// execute
-		
-	memmove(&js.attach,attach,sizeof(attach_type));
+		// make sure UTF8 conversion didn't go crazy
+		// on some hidden characters
 	
-	scripts_clear_last_error();
-	
-	if (!JS_EvaluateScript(js.cx,script->global,script->data,script->data_len,script->name,0,&rval)) {
-		scripts_get_last_error(err_str);
+	j_script_data=JSStringCreateWithUTF8CString(script->data);
+	if (JSStringGetLength(j_script_data)!=strlen(script->data)) {
+		JSStringRelease(j_script_data);
+		sprintf(err_str,"[%s] contains extraneous control characters",script->name);
 		return(FALSE);
 	}
 
-		// get a pointer to the event object
+		// evaulate script
 		
-	scripts_setup_events(script->uid);
+	j_script_name=JSStringCreateWithUTF8CString(script->name);
 	
-		// send the construct event
+	rval=JSEvaluateScript(script->cx,j_script_data,NULL,j_script_name,0,&exception);
+
+	JSStringRelease(j_script_name);
+	JSStringRelease(j_script_data);
+
+		// check for errors
 		
-	return(scripts_post_event(attach,sd_event_construct,0,0,err_str));
+	if (rval==NULL) {
+		script_exception_to_string(script->cx,-1,exception,err_str,256);
+		return(FALSE);
+	}
+	
+	return(TRUE);
 }
 
 /* =======================================================
@@ -340,97 +183,162 @@ bool scripts_execute(attach_type *attach,script_type *script,char *err_str)
       
 ======================================================= */
 	
-bool scripts_add(attach_type *attach,char *sub_dir,char *name,char *params,char *err_str)
+int scripts_add_single(int thing_type,char *sub_dir,char *name,int obj_idx,int weap_idx,int proj_setup_idx,char *err_str)
 {
-	int						idx;
+	int						n,idx;
 	bool					ok;
 	script_type				*script;
-	
-		// no script
-		
-	attach->script_uid=-1;
-	
+
 		// find a unused script
+		
+	idx=-1;
 	
-	idx=scripts_find_free();
+	for (n=0;n!=max_script_list;n++) {
+		script=js.script_list.scripts[n];
+		if (script==NULL) {
+			idx=n;
+			break;
+		}
+	}
+	
 	if (idx==-1) {
 		strcpy(err_str,"JavaScript Engine: Reached the maximum number of scripts");
-		return(FALSE);
+		return(-1);
 	}
 	
-		// start the script
+		// create it
 		
-	script=&js.scripts[idx];
-	script->used=TRUE;
+	js.script_list.scripts[idx]=(script_type*)malloc(sizeof(script_type));
+	if (js.script_list.scripts[idx]==NULL) {
+		strcpy(err_str,"JavaScript Engine: Out of memory");
+		return(-1);
+	}
+
+		// add it
+
+	script=js.script_list.scripts[idx];
+
+	script->idx=idx;
+	script->parent_idx=-1;
+	script->child_idx=-1;
 	
 	strcpy(script->name,name);
-	if (params!=NULL) {
-		strcpy(script->params,params);
-	}
-	else {
-		script->params[0]=0x0;
-	}
+	strcpy(script->sub_dir,sub_dir);
+	script->implement_name[0]=0x0;
 
-	script->global=NULL;
-	script->obj=NULL;
+		// setup script data
 
-		// script attachments
-		
-	script->uid=js.script_current_uid;
-	js.script_current_uid++;
+	scripts_setup_data(script,thing_type,obj_idx,weap_idx,proj_setup_idx);
 	
-	attach->script_uid=script->uid;
+		// create the context
+		// and remember the global object
+		
+	script->cx=JSGlobalContextCreateInGroup(js.cx_group,NULL);
+	JSGlobalContextRetain(script->cx);
+	
+	script->global_obj=JSContextGetGlobalObject(script->cx);
 	
 		// load in script
 
 	if (!script_load_file(script,sub_dir,name,err_str)) {
-		script->used=FALSE;
-		return(FALSE);
+		free(js.script_list.scripts[idx]);
+		js.script_list.scripts[idx]=NULL;
+		return(-1);
 	}
 	
 		// create the global object
 
 	if (!script_add_global_object(script,err_str)) {
 		script_free_file(script);
-		script->used=FALSE;
-		return(FALSE);
+		free(js.script_list.scripts[idx]);
+		js.script_list.scripts[idx]=NULL;
+		return(-1);
 	}
+
+		// add in any constants
+
+	script_defines_create_constants(script);
 	
 		// create the object
-	
-	script->obj=script_create_main_object(attach);
+		
+	script->obj=script_create_main_object(script->cx,script->idx);
 	if (script->obj==NULL) {
 		strcpy(err_str,"JavaScript Engine: Not enough memory to create an object");
 		script_free_file(script);
-		script->used=FALSE;
-		return(FALSE);
+		free(js.script_list.scripts[idx]);
+		js.script_list.scripts[idx]=NULL;
+		return(-1);
 	}
 	
-		// compile and execute the construct function
+		// root the object
 	
-	ok=scripts_execute(attach,script,err_str);
+	JSValueProtect(script->cx,(JSValueRef)script->obj);
+	
+		// compile and execute
+		
+	ok=scripts_execute(script,err_str);
 	script_free_file(script);
 	
 	if (!ok) {
-		script->used=FALSE;
-		return(FALSE);
+		free(js.script_list.scripts[idx]);
+		js.script_list.scripts[idx]=NULL;
+		return(-1);
 	}
-	
-		// root the objects
 		
-	script_add_roots(script);
-		
-	return(TRUE);
+	return(idx);
 }
 
-bool scripts_add_console(attach_type *attach,char *sub_dir,char *name,char *params,char *err_str)
+int scripts_add(int thing_type,char *sub_dir,char *name,int obj_idx,int weap_idx,int proj_setup_idx,char *err_str)
 {
-	if (!scripts_add(attach,sub_dir,name,params,err_str)) {
-		console_add_error(err_str);
-		if (setup.debug_console) console_trigger_set();
+	int					script_idx,parent_script_idx;
+	script_type			*script,*parent_script;
+
+		// add the script
+		
+	script_idx=scripts_add_single(thing_type,sub_dir,name,obj_idx,weap_idx,proj_setup_idx,err_str);
+	if (script_idx==-1) return(-1);
+
+		// setup the events
+		
+	script=js.script_list.scripts[script_idx];
+	
+		// setup any implemented parent scripts
+		
+	if (script->implement_name[0]!=0x0) {
+	
+			// start the parent script
+	
+		parent_script_idx=scripts_add(thing_type,script->sub_dir,script->implement_name,obj_idx,weap_idx,proj_setup_idx,err_str);
+		if (parent_script_idx==-1) return(-1);
+
+			// set the parent and the child
+
+		script->parent_idx=parent_script_idx;
+
+		parent_script=js.script_list.scripts[parent_script_idx];
+		parent_script->child_idx=script_idx;
+	}
+
+	return(script_idx);
+}
+
+bool scripts_set_implement(int script_idx,char *name,char *err_str)
+{
+	script_type			*script;
+	
+		// already have a parent?
+
+	script=js.script_list.scripts[script_idx];
+	if (script->parent_idx!=-1) {
+		strcpy(err_str,"This script already has an implemented script");
 		return(FALSE);
 	}
-	
+
+		// parent scripts get constructed when child scripts
+		// finished executing
+		
+	strcpy(script->implement_name,name);
+
 	return(TRUE);
 }
 
@@ -440,33 +348,102 @@ bool scripts_add_console(attach_type *attach,char *sub_dir,char *name,char *para
       
 ======================================================= */
 
-void scripts_dispose(int uid)
+void scripts_dispose_single(int idx)
 {
-	int			idx;
-	script_type	*script;
+	script_type		*script;
 	
-		// no script loaded
-		
-	if (uid==-1) return;
-	
-		// find script
-
-	idx=scripts_find_uid(uid);
-	if (idx==-1) return;
-
 		// dispose all script timers
 
-	timers_script_dispose(uid);
+	timers_script_dispose(idx);
 
-		// dispose
+		// unroot the object and clean up
+		// the context
 
-	script=&js.scripts[idx];
+	script=js.script_list.scripts[idx];
 	
-	script_remove_roots(script);
-	script->used=FALSE;
+	JSValueUnprotect(script->cx,(JSValueRef)script->obj);
+	JSGlobalContextRelease(script->cx);
 	
 		// force clean-up of removed scripts
 	
-	scripts_clean_up_roots();
+	JSGarbageCollect(NULL);
+	
+		// script is now free
+		
+	free(js.script_list.scripts[idx]);
+	js.script_list.scripts[idx]=NULL;
 }
+
+void scripts_dispose(int idx)
+{
+	script_type		*script;
+
+		// no attached script
+
+	if (idx==-1) return;
+
+		// dispose any parent
+		
+	script=js.script_list.scripts[idx];
+	if (script->parent_idx!=-1) scripts_dispose_single(script->parent_idx);
+
+		// dispose the script itself
+
+	scripts_dispose_single(idx);
+}
+
+/* =======================================================
+
+      JS Glue Code
+      
+======================================================= */
+
+// supergumba -- js -- as a patch?
+
+bool JSValueIsArray(JSContextRef ctx,JSValueRef value)
+{
+	char				*ch,str[64];
+	JSStringRef			jsStr;
+	JSObjectRef			arrayObj;
+	JSValueRef			val;
+	
+		// only check objects
+
+	if (!JSValueIsObject(ctx,value)) return(FALSE);
+	
+		// get constructor
+
+	arrayObj=JSValueToObject(ctx,value,NULL);
+	if (arrayObj==NULL) return(FALSE);
+
+	jsStr=JSStringCreateWithUTF8CString("constructor");
+	val=JSObjectGetProperty(ctx,arrayObj,jsStr,NULL);
+	JSStringRelease(jsStr);
+
+	if (val==NULL) return(FALSE);
+
+		// get constructor as a function
+
+	jsStr=JSValueToStringCopy(ctx,val,NULL);
+	if (jsStr==NULL) return(FALSE);
+
+	JSStringGetUTF8CString(jsStr,str,64);
+	str[63]=0x0;
+
+	JSStringRelease(jsStr);
+
+		// special check to make sure we don't have Array
+		// anywhere else in a function body or there just
+		// instead a function body
+
+	ch=strchr(str,'{');
+	if (ch==NULL) return(FALSE);
+
+	*ch=0x0;
+
+		// look for array in string
+
+	return(strstr(str,"Array")!=NULL);
+}
+
 

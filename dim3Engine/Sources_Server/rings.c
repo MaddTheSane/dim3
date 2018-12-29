@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,24 +29,13 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "effects.h"
-#include "cameras.h"
 
 extern map_type				map;
 extern server_type			server;
+extern iface_type			iface;
 extern setup_type			setup;
-
-/* =======================================================
-
-      Initialize Rings
-      
-======================================================= */
-
-void ring_initialize(void)
-{
-	server.count.ring=0;
-}
 
 /* =======================================================
 
@@ -54,14 +43,14 @@ void ring_initialize(void)
       
 ======================================================= */
 
-ring_type* ring_find(char *name)
+iface_ring_type* ring_find(char *name)
 {
-	int			n;
-	ring_type	*ring;
+	int				n;
+	iface_ring_type	*ring;
+
+	ring=iface.ring_list.rings;
 	
-	ring=server.rings;
-	
-	for (n=0;n!=server.count.ring;n++) {
+	for (n=0;n!=iface.ring_list.nring;n++) {
 		if (strcasecmp(ring->name,name)==0) return(ring);
 		ring++;
 	}
@@ -71,12 +60,12 @@ ring_type* ring_find(char *name)
 
 int ring_find_index(char *name)
 {
-	int			n;
-	ring_type	*ring;
-	
-	ring=server.rings;
-	
-	for (n=0;n!=server.count.ring;n++) {
+	int				n;
+	iface_ring_type	*ring;
+
+	ring=iface.ring_list.rings;
+
+	for (n=0;n!=iface.ring_list.nring;n++) {
 		if (strcasecmp(ring->name,name)==0) return(n);
 		ring++;
 	}
@@ -90,7 +79,7 @@ int ring_find_index(char *name)
       
 ======================================================= */
 
-int ring_get_effect_size(ring_type *ring)
+int ring_get_effect_size(iface_ring_type *ring)
 {
 	int			x,y,z;
 
@@ -107,19 +96,21 @@ int ring_get_effect_size(ring_type *ring)
       
 ======================================================= */
 
-bool ring_spawn(int ring_idx,int obj_uid,d3pnt *pt,d3ang *ang)
+bool ring_spawn(int ring_idx,int obj_idx,d3pnt *pt,d3ang *ang)
 {
-	obj_type				*obj;
+	int						effect_idx;
 	effect_type				*effect;
 	ring_effect_data		*eff_ring;
-	ring_type				*ring;
+	iface_ring_type			*ring;
 	
-	ring=&server.rings[ring_idx];
+	ring=&iface.ring_list.rings[ring_idx];
 		
 		// create ring
 
-	effect=effect_spawn(ef_ring,pt,ring->life_msec);
-	if (effect==NULL) return(FALSE);
+	effect_idx=effect_spawn(ef_ring,pt,ring->life_msec);
+	if (effect_idx==-1) return(FALSE);
+	
+	effect=server.effect_list.effects[effect_idx];
 	
 	eff_ring=&effect->data.ring;
 	eff_ring->ring_idx=ring_idx;
@@ -138,27 +129,23 @@ bool ring_spawn(int ring_idx,int obj_uid,d3pnt *pt,d3ang *ang)
 		// setup size
 
 	effect->size=ring_get_effect_size(ring);
-
-		// any tinting
-
-	eff_ring->tint.r=eff_ring->tint.g=eff_ring->tint.b=1.0f;
-
-	if ((ring->team_tint) && (obj_uid!=-1)) {
-		obj=object_find_uid(obj_uid);
-		if (obj!=NULL) object_get_tint(obj,&eff_ring->tint);
-	}
 	
 	return(TRUE);
 }
 
-bool ring_line_spawn(int ring_idx,int obj_uid,d3pnt *start_pt,d3pnt *end_pt,int count)
+bool ring_line_spawn(int ring_idx,int obj_idx,d3pnt *start_pt,d3pnt *end_pt,int count)
 {
 	int				n,dx,dz,dy;
 	d3pnt			pt;
 	d3ang			ang;
 
-	if (count<=0) return(TRUE);
-
+		// need more than 1 ring to do effect
+		
+	if (count<=1) {
+		ring_spawn(ring_idx,obj_idx,start_pt,NULL);
+		return(TRUE);
+	}
+	
 		// get angle between lines
 		// right now only do y rotations as two
 		// many rotations can cause math errors
@@ -167,18 +154,24 @@ bool ring_line_spawn(int ring_idx,int obj_uid,d3pnt *start_pt,d3pnt *end_pt,int 
 	ang.y=angle_find(start_pt->x,start_pt->z,end_pt->x,end_pt->z);
 	ang.z=0.0f;
 
-		// start rings
+		// create line of rings
+		// we want first ring and last ring
+		// to be at end of lines so divide over
+		// count-1 instead of count
 
 	dx=end_pt->x-start_pt->x;
 	dy=end_pt->y-start_pt->y;
 	dz=end_pt->z-start_pt->z;
+	
+	count--;
 
 	for (n=0;n!=count;n++) {
+		
 		pt.x=start_pt->x+((dx*n)/count);
 		pt.y=start_pt->y+((dy*n)/count);
 		pt.z=start_pt->z+((dz*n)/count);
 
-		if (!ring_spawn(ring_idx,obj_uid,&pt,&ang)) return(FALSE);
+		if (!ring_spawn(ring_idx,obj_idx,&pt,&ang)) return(FALSE);
 	}
 
 	return(TRUE);

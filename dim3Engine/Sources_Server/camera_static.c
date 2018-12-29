@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,17 +29,14 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "cameras.h"
 #include "scripts.h"
 
 extern server_type		server;
 extern map_type			map;
 extern camera_type		camera;
 extern js_type			js;
-
-d3pnt					camera_static_pnt;
-d3ang					camera_static_walk_ang;
 
 /* =======================================================
 
@@ -54,56 +51,80 @@ void camera_static_connect(void)
 
 /* =======================================================
 
-      Update Static Camera
-      
-======================================================= */
-
-void camera_static_update(int x,int z,int y)
-{
-    camera_static_pnt.x=x;
-    camera_static_pnt.z=z;
-    camera_static_pnt.y=y;
-}
-
-/* =======================================================
-
       Chase Camera Position
       
 ======================================================= */
 
-void camera_static_get_position(d3pnt *pnt,d3ang *ang)
+void camera_static_calc_position(void)
 {
+	int				y;
 	obj_type		*obj;
     
 		// get position
 
-	memmove(pnt,&camera_static_pnt,sizeof(d3pnt));
-
-	if (ang==NULL) return;
+	camera.cur_pos.pnt.x=camera.cur_pos.static_pnt.x+map.camera.pnt_offset.x;
+	camera.cur_pos.pnt.y=camera.cur_pos.static_pnt.y+map.camera.pnt_offset.y;
+	camera.cur_pos.pnt.z=camera.cur_pos.static_pnt.z+map.camera.pnt_offset.z;
 	
 		// if following an object, point camera at object
 
-    if (camera.static_follow) {
-		obj=object_find_uid(camera.obj_uid);
-        ang->y=angle_find(camera_static_pnt.x,camera_static_pnt.z,obj->pnt.x,obj->pnt.z);
-		ang->x=-(180.0f-angle_find(camera_static_pnt.y,camera_static_pnt.z,obj->pnt.y,obj->pnt.z));
- 		ang->z=camera.ang.z;
-		return;
-	}
- 
-		// if in walk and not following
-		// then point way specified in node
-
-	if (camera.auto_walk.on) {
-		ang->x=angle_add(camera_static_walk_ang.x,camera.ang.x);
-		ang->y=angle_add(camera_static_walk_ang.y,camera.ang.y);
-		ang->z=angle_add(camera_static_walk_ang.z,camera.ang.z);
+    if (map.camera.c_static.follow) {
+		obj=server.obj_list.objs[camera.obj_idx];
+		
+			// if bumping, need to add in the bump
+			
+		y=obj->pnt.y;
+		if (obj->bump.on) y+=obj->bump.smooth_offset;
+		
+			// point camera towards object
+			
+		camera.cur_pos.ang.x=-(180.0f-angle_find(camera.cur_pos.pnt.y,camera.cur_pos.pnt.z,y,obj->pnt.z));
+        camera.cur_pos.ang.y=angle_find(camera.cur_pos.pnt.x,camera.cur_pos.pnt.z,obj->pnt.x,obj->pnt.z);
+		camera.cur_pos.ang.z=0.0f;
+		
 		return;
 	}
 
 		// else just use camera offset
+		// x needs to be positive/negative numbers
 
-	memmove(ang,&camera.ang,sizeof(d3ang));
+	camera.cur_pos.ang.x=camera.cur_pos.static_ang.x+map.camera.ang_offset.x;
+	if (camera.cur_pos.ang.x>180.0f) camera.cur_pos.ang.x-=360.0f;
+
+	camera.cur_pos.ang.y=angle_add(camera.cur_pos.static_ang.y,map.camera.ang_offset.y);
+	camera.cur_pos.ang.z=camera.cur_pos.static_ang.z+map.camera.ang_offset.z;
+}
+
+/* =======================================================
+
+      Setup Node To Node Walk Values
+      
+======================================================= */
+
+void camera_walk_to_node_setup_speed_turn(void)
+{
+	int					msec,dist;
+	node_type			*node;
+	
+		// remember start and end points
+		// and camera angles
+		
+	node=&map.nodes[camera.auto_walk.node_seek_idx];
+
+	memmove(&camera.auto_walk.start_pnt,&camera.cur_pos.static_pnt,sizeof(d3pnt));
+	memmove(&camera.auto_walk.end_pnt,&node->pnt,sizeof(d3pnt));
+	
+	memmove(&camera.auto_walk.start_ang,&camera.cur_pos.static_ang,sizeof(d3ang));
+	memmove(&camera.auto_walk.end_ang,&node->ang,sizeof(d3ang));
+	
+		// find the amount of ticks this
+		// to node walk will take
+		
+	dist=distance_get(camera.auto_walk.start_pnt.x,camera.auto_walk.start_pnt.y,camera.auto_walk.start_pnt.z,camera.auto_walk.end_pnt.x,camera.auto_walk.end_pnt.y,camera.auto_walk.end_pnt.z);
+	msec=(camera.auto_walk.msec*dist)/camera.auto_walk.total_dist;
+	
+	camera.auto_walk.start_tick=game_time_get();
+	camera.auto_walk.end_tick=camera.auto_walk.start_tick+msec;
 }
 
 /* =======================================================
@@ -112,54 +133,44 @@ void camera_static_get_position(d3pnt *pnt,d3ang *ang)
       
 ======================================================= */
 
-bool camera_walk_to_node_setup(char *start_node,char *end_node,int msec,int event_id,bool open_doors,bool in_freeze)
+bool camera_walk_to_node_by_index_setup(int from_idx,int to_idx,int msec,int event_id,bool open_doors,bool in_freeze,char *err_str)
 {
-	int			from_idx,to_idx,dist;
+	int			dist;
 	float		speed;
 	obj_type	*player_obj;
+	node_type	*node;
 
 		// only works in static camera
 
-	if (camera.mode!=cv_static) {
-		JS_ReportError(js.cx,"Can only walk cameras in static mode");
-		return(FALSE);
-	}
-	
-		// get the nodes
-		
-	from_idx=map_find_node(&map,start_node);
-	if (from_idx==-1) {
-		JS_ReportError(js.cx,"Named node does not exist: %s",start_node);
-		return(FALSE);
-	}
-	
-	to_idx=map_find_node(&map,end_node);
-	if (to_idx==-1) {
-		JS_ReportError(js.cx,"Named node does not exist: %s",end_node);
+	if (map.camera.camera_mode!=cv_static) {
+		strcpy(err_str,"Can only walk cameras in static mode");
 		return(FALSE);
 	}
 	
 		// is end node in start node path?
 		
 	if (map_find_next_node_in_path(&map,from_idx,to_idx)==-1) {
-		JS_ReportError(js.cx,"End node '%s' is not in the same path as the start node '%s'",end_node,start_node);
+		sprintf(err_str,"End node '%s' is not in the same path as the start node '%s'",map.nodes[to_idx].name,map.nodes[from_idx].name);
 		return(FALSE);
 	}
 
 		// get total distance
+		// make sure to add in the distance it takes to
+		// get to the first node
+
+	node=&map.nodes[from_idx];
 
 	dist=map_node_to_node_distance(&map,from_idx,to_idx);
+	dist+=distance_get(camera.cur_pos.static_pnt.x,camera.cur_pos.static_pnt.y,camera.cur_pos.static_pnt.z,node->pnt.x,node->pnt.y,node->pnt.z);
+
 	if (dist==0) {
-		JS_ReportError(js.cx,"Camera walk covers no distance");
+		strcpy(err_str,"Camera walk covers no distance");
 		return(FALSE);
 	}
 
-	speed=(float)dist/(float)(msec/10);
+	speed=((float)dist)/(float)(msec/10);
 	
-		// start at the start node and seek to the next node
-		
-	memmove(&camera_static_pnt,&map.nodes[from_idx].pnt,sizeof(d3pnt));
-	memmove(&camera_static_walk_ang,&map.nodes[from_idx].ang,sizeof(d3ang));
+		// get from node
 
 	from_idx=map_find_next_node_in_path(&map,from_idx,to_idx);
 	if (from_idx==-1) return(TRUE);
@@ -171,18 +182,74 @@ bool camera_walk_to_node_setup(char *start_node,char *end_node,int msec,int even
 	camera.auto_walk.in_freeze=in_freeze;
 	camera.auto_walk.node_seek_idx=from_idx;
 	camera.auto_walk.node_dest_idx=to_idx;
+	camera.auto_walk.total_dist=dist;
 	camera.auto_walk.msec=msec;
 	camera.auto_walk.speed=speed;
 	camera.auto_walk.event_id=event_id;
 	
+		// setup the speed and turning
+		// for walking to next node
+
+	camera_walk_to_node_setup_speed_turn();
+	
 		// player freeze
 		
 	if (in_freeze) {
-		player_obj=object_find_uid(server.player_obj_uid);
+		player_obj=server.obj_list.objs[server.player_obj_idx];
 		object_input_freeze(player_obj,TRUE);
 	}
 
 	return(TRUE);
+}
+
+bool camera_walk_to_node_setup(char *start_node,char *end_node,int msec,int event_id,bool open_doors,bool in_freeze,char *err_str)
+{
+	int			from_idx,to_idx;
+
+		// get the nodes
+		
+	from_idx=map_find_node(&map,start_node);
+	if (from_idx==-1) {
+		sprintf(err_str,"Named node does not exist: %s",start_node);
+		return(FALSE);
+	}
+	
+	to_idx=map_find_node(&map,end_node);
+	if (to_idx==-1) {
+		sprintf(err_str,"Named node does not exist: %s",end_node);
+		return(FALSE);
+	}
+
+		// call the index version
+
+	return(camera_walk_to_node_by_index_setup(from_idx,to_idx,msec,event_id,open_doors,in_freeze,err_str));
+}
+
+/* =======================================================
+
+      Walk to Node Angle Utility
+      
+======================================================= */
+
+float camera_walk_to_node_move_angle(float s_ang,float e_ang,int tick,int tot_tick)
+{
+	float			ang;
+
+	if (s_ang<e_ang) {
+		if ((e_ang-s_ang)<=180.0f) return(s_ang+(((e_ang-s_ang)*((float)tick))/((float)tot_tick)));
+
+		s_ang+=360.0f;
+		ang=s_ang+(((e_ang-s_ang)*((float)tick))/((float)tot_tick));
+		if (ang>=360.0f) ang-=360.0f;
+		return(ang);
+	}
+
+	if ((s_ang-e_ang)<=180.0f) return(s_ang+(((e_ang-s_ang)*((float)tick))/((float)tot_tick)));
+
+	e_ang+=360.0f;
+	ang=s_ang+(((e_ang-s_ang)*((float)tick))/((float)tot_tick));
+	if (ang>=360.0f) ang-=360.0f;
+	return(ang);
 }
 
 /* =======================================================
@@ -193,8 +260,8 @@ bool camera_walk_to_node_setup(char *start_node,char *end_node,int msec,int even
 
 void camera_static_run(void)
 {
-	int			dist,seek_idx,dest_idx;
-	float		sx,sy,sz,tot;
+	int			seek_idx,dest_idx,
+				tick,tot_tick;
 	node_type	*node;
 	obj_type	*player_obj;
 
@@ -208,70 +275,64 @@ void camera_static_run(void)
 	dest_idx=camera.auto_walk.node_dest_idx;
 		
 	node=&map.nodes[seek_idx];
-
-		// move towards node
-		// get percentage of each different and use that
-		// to adjust the speed
-
-	sx=(float)abs(node->pnt.x-camera_static_pnt.x);
-	sy=(float)abs(node->pnt.y-camera_static_pnt.y);
-	sz=(float)abs(node->pnt.z-camera_static_pnt.z);
-	tot=sx+sy+sz;
-
-	sx=sx/tot;
-	sy=sy/tot;
-	sz=sz/tot;
-
-	sx*=camera.auto_walk.speed;
-	if (node->pnt.x<camera_static_pnt.x) sx=-sx;
 	
-	sy*=camera.auto_walk.speed;
-	if (node->pnt.y<camera_static_pnt.y) sy=-sy;
+		// have we finished this node
+		// walk?
+		
+	tick=game_time_get();
 	
-	sz*=camera.auto_walk.speed;
-	if (node->pnt.z<camera_static_pnt.z) sz=-sz;
+		// no, use the ratio to walk
+		
+	if (tick<camera.auto_walk.end_tick) {
+	
+		tick-=camera.auto_walk.start_tick;
+		tot_tick=camera.auto_walk.end_tick-camera.auto_walk.start_tick;
 
-	camera_static_pnt.x+=(int)sx;
-	camera_static_pnt.y+=(int)sy;
-	camera_static_pnt.z+=(int)sz;
+			// set the current walk pnt
+		
+		camera.cur_pos.static_pnt.x=camera.auto_walk.start_pnt.x+(((camera.auto_walk.end_pnt.x-camera.auto_walk.start_pnt.x)*tick)/tot_tick);
+		camera.cur_pos.static_pnt.y=camera.auto_walk.start_pnt.y+(((camera.auto_walk.end_pnt.y-camera.auto_walk.start_pnt.y)*tick)/tot_tick);
+		camera.cur_pos.static_pnt.z=camera.auto_walk.start_pnt.z+(((camera.auto_walk.end_pnt.z-camera.auto_walk.start_pnt.z)*tick)/tot_tick);
 
-		// distance to seek node
+			// get the look angle if not following
 
-	dist=distance_get(node->pnt.x,node->pnt.y,node->pnt.z,camera_static_pnt.x,camera_static_pnt.y,camera_static_pnt.z);
-
-		// get the look angle if not following
-
-    if (!camera.static_follow) {
-		camera_static_walk_ang.x=angle_turn_toward(camera_static_walk_ang.x,node->ang.x,camera.auto_walk.turn_speed);
-		camera_static_walk_ang.y=angle_turn_toward(camera_static_walk_ang.y,node->ang.y,camera.auto_walk.turn_speed);
-		camera_static_walk_ang.z=angle_turn_toward(camera_static_walk_ang.z,node->ang.z,camera.auto_walk.turn_speed);
+		if (!map.camera.c_static.follow) {
+			camera.cur_pos.static_ang.x=camera_walk_to_node_move_angle(camera.auto_walk.start_ang.x,camera.auto_walk.end_ang.x,tick,tot_tick);
+			camera.cur_pos.static_ang.y=camera_walk_to_node_move_angle(camera.auto_walk.start_ang.y,camera.auto_walk.end_ang.y,tick,tot_tick);
+			camera.cur_pos.static_ang.z=camera_walk_to_node_move_angle(camera.auto_walk.start_ang.z,camera.auto_walk.end_ang.z,tick,tot_tick);
+		}
+		
+		return;
 	}
 	
-		// near current seek node?
+		// finish by setting everything
+		// to end node to eliminate any slop
 		
-	if (dist>(int)(camera.auto_walk.speed*node_slop_speed_factor)) return;	
+	memmove(&camera.cur_pos.static_pnt,&camera.auto_walk.end_pnt,sizeof(d3pnt));
+	if (!map.camera.c_static.follow) memmove(&camera.cur_pos.static_ang,&node->ang,sizeof(d3ang));
 	
 		// move on to next node
 		
 	if (seek_idx!=dest_idx) {
 		camera.auto_walk.node_seek_idx=map_find_next_node_in_path(&map,seek_idx,dest_idx);
-		scripts_post_event_console(&js.course_attach,sd_event_path,sd_event_path_node,node->event_id);
+		camera_walk_to_node_setup_speed_turn();
+
+		scripts_post_event_console(js.course_script_idx,-1,sd_event_path,sd_event_path_node,node->event_id);
 		return;
 	}
 	
 		// at last node
 		
 	camera.auto_walk.on=FALSE;
-	memmove(&camera_static_walk_ang,&node->ang,sizeof(d3ang));
 
 		// player freeze
 		
 	if (camera.auto_walk.in_freeze) {
-		player_obj=object_find_uid(server.player_obj_uid);
+		player_obj=server.obj_list.objs[server.player_obj_idx];
 		object_input_freeze(player_obj,FALSE);
 	}
 	
 		// send event
 	
-	scripts_post_event_console(&js.course_attach,sd_event_path,sd_event_path_done,camera.auto_walk.event_id);
+	scripts_post_event_console(js.course_script_idx,-1,sd_event_path,sd_event_path_done,camera.auto_walk.event_id);
 }

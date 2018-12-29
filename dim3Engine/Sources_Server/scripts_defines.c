@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,8 +29,11 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "scripts.h"
+
 extern js_type				js;
 extern setup_type			setup;
+extern file_path_setup_type	file_path_setup;
 
 script_define_type			*script_user_defines;
 
@@ -78,14 +81,6 @@ script_define_type			script_dim3_defines[]={
 								{sd_light_direction_pos_y,						"",		"DIM3_LIGHT_DIRECTION_POS_Y"},
 								{sd_light_direction_neg_z,						"",		"DIM3_LIGHT_DIRECTION_NEG_Z"},
 								{sd_light_direction_pos_z,						"",		"DIM3_LIGHT_DIRECTION_POS_Z"},
-
-								{sd_model_lit_flat,								"",		"DIM3_MODEL_LIT_FLAT"},
-								{sd_model_lit_hilite,							"",		"DIM3_MODEL_LIT_HILITE"},
-								{sd_model_lit_hilite_diffuse,					"",		"DIM3_MODEL_LIT_HILITE_DIFFUSE"},
-								{sd_model_lit_vertex,							"",		"DIM3_MODEL_LIT_VERTEX"},
-								
-								{sd_model_shadow_mode_normal,					"",		"DIM3_MODEL_SHADOW_MODE_NORMAL"},
-								{sd_model_shadow_mode_static,					"",		"DIM3_MODEL_SHADOW_MODE_STATIC"},
 								
 								{sd_message_to_player,							"",		"DIM3_MESSAGE_TO_PLAYER"},
 								{sd_message_to_object,							"",		"DIM3_MESSAGE_TO_OBJECT"},
@@ -104,6 +99,7 @@ script_define_type			script_dim3_defines[]={
 
 								{sd_liquid_out,									"",		"DIM3_LIQUID_OUT"},
 								{sd_liquid_in,									"",		"DIM3_LIQUID_IN"},
+								{sd_liquid_float,								"",		"DIM3_LIQUID_FLOAT"},
 								{sd_liquid_under,								"",		"DIM3_LIQUID_UNDER"},
 								
 								{sd_projection_type_fov,						"",		"DIM3_PROJECTION_TYPE_FOV"},
@@ -112,10 +108,28 @@ script_define_type			script_dim3_defines[]={
 								{sd_team_none,									"",		"DIM3_TEAM_NONE"},
 								{sd_team_red,									"",		"DIM3_TEAM_RED"},
 								{sd_team_blue,									"",		"DIM3_TEAM_BLUE"},
+								{sd_team_common,								"",		"DIM3_TEAM_COMMON"},
 
 								{sd_skill_easy,									"",		"DIM3_SKILL_EASY"},
 								{sd_skill_medium,								"",		"DIM3_SKILL_MEDIUM"},
 								{sd_skill_hard,									"",		"DIM3_SKILL_HARD"},
+								
+								{sd_spot_type_object,							"",		"DIM3_SPOT_TYPE_OBJECT"},
+								{sd_spot_type_bot,								"",		"DIM3_SPOT_TYPE_BOT"},
+								{sd_spot_type_player,							"",		"DIM3_SPOT_TYPE_PLAYER"},
+								{sd_spot_type_spawn,							"",		"DIM3_SPOT_TYPE_SPAWN"},
+								{sd_spot_type_checkpoint,						"",		"DIM3_SPOT_TYPE_CHECKPOINT"},
+								
+								{sd_object_type_player,							"",		"DIM3_OBJECT_TYPE_PLAYER"},
+								{sd_object_type_bot_multiplayer,				"",		"DIM3_OBJECT_TYPE_BOT_MULTIPLAYER"},
+								{sd_object_type_bot_map,						"",		"DIM3_OBJECT_TYPE_BOT_MAP"},
+								{sd_object_type_object,							"",		"DIM3_OBJECT_TYPE_OBJECT"},
+								{sd_object_type_remote_player,					"",		"DIM3_OBJECT_TYPE_REMOTE_PLAYER"},
+								{sd_object_type_remote_object,					"",		"DIM3_OBJECT_TYPE_REMOTE_OBJECT"},
+								
+								{sd_collision_mode_cylinder,					"",		"DIM3_COLLISION_MODE_CYLINDER"},
+								{sd_collision_mode_box,							"",		"DIM3_COLLISION_MODE_BOX"},
+								{sd_collision_mode_simple,						"",		"DIM3_COLLISION_MODE_SIMPLE"},
 
 									// main events
 									
@@ -155,10 +169,16 @@ script_define_type			script_dim3_defines[]={
 								{sd_event_console,								"",		"DIM3_EVENT_CONSOLE"},
 								{sd_event_interface,							"",		"DIM3_EVENT_INTERFACE"},
 								{sd_event_state,								"",		"DIM3_EVENT_STATE"},
-								{sd_event_rule,									"",		"DIM3_EVENT_RULE"},
 								{sd_event_remote,								"",		"DIM3_EVENT_REMOTE"},
+								{sd_event_score,								"",		"DIM3_EVENT_SCORE"},
+								{sd_event_dispose,								"",		"DIM3_EVENT_DISPOSE"},
 
 									// sub events
+
+								{sd_event_spawn_init,							"",		"DIM3_EVENT_SPAWN_INIT"},
+								{sd_event_spawn_reborn,							"",		"DIM3_EVENT_SPAWN_REBORN"},
+								{sd_event_spawn_game_reset,						"",		"DIM3_EVENT_SPAWN_GAME_RESET"},
+								{sd_event_spawn_map_change,						"",		"DIM3_EVENT_SPAWN_MAP_CHANGE"},
 
 								{sd_event_liquid_in,							"",		"DIM3_EVENT_LIQUID_IN"},
 								{sd_event_liquid_out,							"",		"DIM3_EVENT_LIQUID_OUT"},
@@ -216,6 +236,10 @@ script_define_type			script_dim3_defines[]={
 								{sd_event_animation_weapon_raise,				"",		"DIM3_EVENT_ANIMATION_WEAPON_RAISE"},
 								{sd_event_animation_weapon_lower,				"",		"DIM3_EVENT_ANIMATION_WEAPON_LOWER"},
 								{sd_event_animation_weapon_held,				"",		"DIM3_EVENT_ANIMATION_WEAPON_HELD"},
+								{sd_event_animation_weapon_add_ammo,			"",		"DIM3_EVENT_ANIMATION_WEAPON_ADD_AMMO"},
+								{sd_event_animation_weapon_add_clip,			"",		"DIM3_EVENT_ANIMATION_WEAPON_ADD_CLIP"},
+								{sd_event_animation_weapon_add_alt_ammo,		"",		"DIM3_EVENT_ANIMATION_WEAPON_ADD_ALT_AMMO"},
+								{sd_event_animation_weapon_add_alt_clip,		"",		"DIM3_EVENT_ANIMATION_WEAPON_ADD_ALT_CLIP"},
 								
 								{sd_event_path_node,							"",		"DIM3_EVENT_PATH_NODE"},
 								{sd_event_path_done,							"",		"DIM3_EVENT_PATH_DONE"},
@@ -226,6 +250,7 @@ script_define_type			script_dim3_defines[]={
 								{sd_event_watch_object_enter_base,				"",		"DIM3_EVENT_WATCH_OBJECT_ENTER_BASE"},
 								{sd_event_watch_object_exit_base,				"",		"DIM3_EVENT_WATCH_OBJECT_EXIT_BASE"},
 								{sd_event_watch_object_sound,					"",		"DIM3_EVENT_WATCH_OBJECT_SOUND"},
+								{sd_event_watch_object_damage,					"",		"DIM3_EVENT_WATCH_OBJECT_DAMAGE"},
 								
 								{sd_event_weapon_fire_single,					"",		"DIM3_EVENT_WEAPON_FIRE_SINGLE"},
 								{sd_event_weapon_fire_up,						"",		"DIM3_EVENT_WEAPON_FIRE_UP"},
@@ -248,13 +273,12 @@ script_define_type			script_dim3_defines[]={
 
 								{sd_event_interface_title_done,					"",		"DIM3_EVENT_INTERFACE_TITLE_DONE"},
 								{sd_event_interface_story_done,					"",		"DIM3_EVENT_INTERFACE_STORY_DONE"},
-								{sd_event_interface_movie_done,					"",		"DIM3_EVENT_INTERFACE_MOVIE_DONE"},
+								{sd_event_interface_cinema_done,				"",		"DIM3_EVENT_INTERFACE_CINEMA_DONE"},
 
 								{sd_event_state_load,							"",		"DIM3_EVENT_STATE_LOAD"},
+								{sd_event_state_load_checkpoint,				"",		"DIM3_EVENT_STATE_LOAD_CHECKPOINT"},
 								{sd_event_state_save,							"",		"DIM3_EVENT_STATE_SAVE"},
-
-								{sd_event_rule_join,							"",		"DIM3_EVENT_RULE_JOIN"},
-								{sd_event_rule_score,							"",		"DIM3_EVENT_RULE_SCORE"},
+								{sd_event_state_save_checkpoint,				"",		"DIM3_EVENT_STATE_SAVE_CHECKPOINT"},
 
 								{sd_event_remote_join,							"",		"DIM3_EVENT_REMOTE_JOIN"},
 								{sd_event_remote_leave,							"",		"DIM3_EVENT_REMOTE_LEAVE"},
@@ -267,17 +291,42 @@ script_define_type			script_dim3_defines[]={
 
 /* =======================================================
 
-      Parse Defines into Scripts
+      Add Defines to Scripts
       
 ======================================================= */
 
-char* script_parse_defines_set(script_define_type *defines,bool use_int_value,char *data,int *p_len)
+bool script_defines_is_number(char *str,bool *is_float)
 {
-	int					len,strsz,repsz,movsz,coff;
-	char				*c,*data2,tch,repstr[64];
+	int			n,len;
+	char		*c,ch;
+
+	*is_float=FALSE;
+
+	len=strlen(str);
+	if (len==0) return(FALSE);
+
+	c=str;
+
+	for (n=0;n!=len;n++) {
+		ch=*c++;
+		if ((ch>='0') && (ch<='9')) continue;
+		if (ch=='.') {
+			*is_float=TRUE;
+			continue;
+		}
+		
+		return(FALSE);
+	}
+
+	return(TRUE);
+}
+
+void script_defines_create_constants_set(script_type *script,script_define_type *defines,bool user_defined)
+{
+	int					i;
+	float				f;
+	bool				is_float;
 	script_define_type	*define;
-	
-	len=*p_len;
 	
 		// run through the defines
 		
@@ -285,93 +334,91 @@ char* script_parse_defines_set(script_define_type *defines,bool use_int_value,ch
 		
 	while (TRUE) {
 		if (define->value_int==-1) break;
-		
-			// define name length
-			
-		strsz=strlen(define->name);
-		
-			// define substitute value
-		
-		if (use_int_value) {
-			sprintf(repstr,"%d",define->value_int);
+
+			// determine how to set property
+			// built in defines are always numbers, but
+			// users can be strings or numbers
+
+		if (!user_defined) {
+			script_set_single_property(script->cx,script->global_obj,define->name,script_int_to_value(script->cx,define->value_int),(kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete));
 		}
 		else {
-			strcpy(repstr,define->value_str);
-		}
-		repsz=strlen(repstr);
-			
-			// run through script
-		
-		c=data;
-		
-		while (TRUE) {
-		
-				// find next occurance
-				
-			c=strstr(c,define->name);
-			if (c==NULL) break;
-			
-				// is this the whole world only?
-				
-			tch=*(c+strsz);
-			if (((tch>='0') && (tch<='9')) || ((tch>='A') && (tch<='Z')) || ((tch>='a') && (tch<='z')) || (tch=='_')) {
-				c+=strsz;
-				continue;
-			}
-			
-			if (c>data) {
-				tch=*(c-1);
-				if (((tch>='0') && (tch<='9')) || ((tch>='A') && (tch<='Z')) || ((tch>='a') && (tch<='z')) || (tch=='_')) {
-					c+=strsz;
-					continue;
+			if (script_defines_is_number(define->value_str,&is_float)) {
+				if (!is_float) {
+					i=atoi(define->value_str);
+					script_set_single_property(script->cx,script->global_obj,define->name,script_int_to_value(script->cx,i),(kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete));
 				}
-			}
-			
-				// replace
-				
-			if (repsz<=strsz) {
-				movsz=(len+1)-(int)((c+strsz)-data);
-				if (movsz>0) memmove((c+repsz),(c+strsz),movsz);
-				memmove(c,repstr,repsz);
-				c+=(repsz-1);
-				len-=(strsz-repsz);
+				else {
+					f=(float)atof(define->value_str);
+					script_set_single_property(script->cx,script->global_obj,define->name,script_float_to_value(script->cx,f),(kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete));
+				}
 			}
 			else {
-				coff=c-data;						// need to remember position to put c back into new array
-				data2=malloc(len+(repsz-strsz)+1);
-
-				if (data2!=NULL) {
-					memmove(data2,data,(len+1));
-					free(data);
-					
-					data=data2;
-					c=data+coff;
-					
-					movsz=(len+1)-(int)((c+strsz)-data);
-					if (movsz>0) memmove((c+repsz),(c+strsz),movsz);
-					
-					memmove(c,repstr,repsz);
-					
-					c+=(repsz-1);
-					len+=(repsz-strsz);
-				}
+				script_set_single_property(script->cx,script->global_obj,define->name,script_string_to_value(script->cx,define->value_str),(kJSPropertyAttributeReadOnly|kJSPropertyAttributeDontDelete));
 			}
-				
 		}
 		
 		define++;
 	}
-	
-	*p_len=len;
-	
-	return(data);
 }
 
-char* script_parse_defines(char *data,int *len)
+void script_defines_create_constants(script_type *script)
 {
-	data=script_parse_defines_set(script_dim3_defines,TRUE,data,len);
-	if (script_user_defines!=NULL) data=script_parse_defines_set(script_user_defines,FALSE,data,len);
-	return(data);
+	script_defines_create_constants_set(script,script_dim3_defines,FALSE);
+	if (script_user_defines!=NULL) script_defines_create_constants_set(script,script_user_defines,TRUE);
+}
+
+/* =======================================================
+
+      Check Defines
+      
+======================================================= */
+
+bool script_is_prop_define(char *name)
+{
+	script_define_type	*define;
+
+		// built in defines
+
+	define=script_dim3_defines;
+		
+	while (TRUE) {
+		if (define->value_int==-1) break;
+		if (strcmp(define->name,name)==0) return(TRUE);
+		define++;
+	}
+
+		// user defines
+
+	if (script_user_defines==NULL) return(FALSE);
+
+	define=script_user_defines;
+		
+	while (TRUE) {
+		if (define->value_int==-1) break;
+		if (strcmp(define->name,name)==0) return(TRUE);
+		define++;
+	}
+
+	return(FALSE);
+}
+
+void script_get_define_for_event(int event,char *name)
+{
+	script_define_type	*define;
+
+	name[0]=0x0;
+	
+	define=script_dim3_defines;
+		
+	while (TRUE) {
+		if (define->value_int==-1) break;
+		if (define->value_int==event) {
+			strcpy(name,define->name);
+			return;
+		}
+		define++;
+	}
 }
 
 /* =======================================================
@@ -428,7 +475,7 @@ void script_load_user_defines(void)
 
 		// read defines file
 
-	file_paths_data(&setup.file_path_setup,path,"Scripts/Global","Defines","txt");
+	file_paths_data(&file_path_setup,path,"Scripts/Global","Defines","txt");
 	
 	file=fopen(path,"rb");
 	if (file==NULL) return;

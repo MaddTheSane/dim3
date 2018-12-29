@@ -1,0 +1,84 @@
+Compiling dim3 require some open-source components that you will need to supply.
+They are listed below:
+
+
+For OS X Compile:
+-----------------
+
+/OSXBuild/Common/Libraries/PNG.framework (PNG lib and headers)
+/OSXBuild/Common/Libraries/MPG123 (mpg123 lib and headers)
+/OSXBuild/Common/Libraries/SDL (SDL lib and headers)
+
+A pre-compiled archive of these can be found at: http://www.klinksoftware.net/download/OSX_Libraries.zip
+
+The OS X compile requires no additional external libraries.
+
+
+For Win32 Compile:
+------------------
+
+/winBuild/Common/Libraries/dim3 (leave empty, compile writes libraries here)
+/winBuild/Common/Libraries/GLEW (GLEW lib and headers)
+/winBuild/Common/Libraries/JavaScriptCore (Webkit JS lib and headers)
+/winBuild/Common/Libraries/PNG (PNG lib and headers)
+/winBuild/Common/Libraries/MPG123 (mpg123 lib and headers)
+/winBuild/Common/Libraries/SDL (SDL lib and headers)
+/winBuild/Common/Libraries/ZLib (ZLib lib and headers)
+
+A pre-compiled archive of these can be found at: http://www.klinksoftware.net/download/Win32_Libraries.zip
+
+Currently, the win32 compile requires these DLLs:
+
+CFLite.dll (for JS)
+glew32.dll (for GLEW)
+icudt40.dll icuin40.dll icuuc40.dll (for JS)
+JavaScriptCore.dll (for JS)
+libpng13.dll (for PNG)
+libmpg123.dll (for MPG123)
+pthreadVC2.dll (for JS)
+SDL.dll (for SDL)
+zlib1.dll (for ZLib)
+
+You can get these by downloading the current win32 version of dim3.
+
+
+For iOS Compile:
+-----------------
+
+/iOSBuild/Common/Libraries/JavaScriptCore (Javascript static lib and headers)
+/iOSBuild/Common/Libraries/PNG (PNG static lib and headers)
+/iOSBuild/Common/Libraries/MPG123 (mpg123 static lib and headers)
+/iOSBuild/Common/Libraries/SDL (SDL static lib and headers)
+
+A pre-compiled archive of these can be found at: http://www.klinksoftware.net/download/iOS_Libraries.zip
+
+The iPhone compile requires no additional external libraries.
+
+NOTE: You must include the data directory inside the application to run it.  Check out
+the run script in the engine build, this copies the data folder into the executable.
+
+NOTE: The iOS build ONLY builds for devices, NOT for the simulator.  The emulated OpenGL is too
+slow on the simulator and it's a bad representation of a running game.
+
+NOTE: There is currently a patch I have for SDL because it doesn't fully support iOS events currently,
+which means you will need to rely on my SDL build for now.
+
+
+============================================================================================
+
+The Projects:
+
+The OS X projects are in the OSXBuild directory.
+The iOS projects is in the iOSBuild directory.
+The win32 projects are in the winbuild directory.
+
+============================================================================================
+
+Pre-processor Macros:
+
+D3_ENGINE, D3_EDITOR = which program we are compiling for
+TARGET_IPHONE = for the iphone compile
+D3_PCH = if precompiled header file needs to be included in source (OS X compile doesn't need it, win32 does)
+D3_OPENRL = for experimental OpenRL compile
+
+

@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,31 +29,18 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "consoles.h"
-#include "interfaces.h"
-#include "effects.h"
-#include "video.h"
-#include "inputs.h"
-#include "xmls.h"
+#include "interface.h"
+#include "objects.h"
 #include "network.h"
-#include "physics.h"
 
+extern iface_type			iface;
 extern server_type			server;
+extern map_type				map;
 extern setup_type			setup;
 extern network_setup_type	net_setup;
 
-extern void game_time_initialize(void);
-extern bool server_initialize(char *err_str);
-extern void server_shutdown(void);
-extern void server_loop(int tick);
-extern bool view_initialize(char *err_str);
-extern void view_shutdown(void);
-extern void view_loop(int tick);
-extern bool game_start(int skill,network_reply_join_remotes *remotes,char *err_str);
-extern void game_end(void);
-extern bool map_start(bool skip_media,char *err_str);
-extern void map_end(void);
-extern void intro_open(void);
+app_type					app;
+file_path_setup_type		file_path_setup;
 
 /* =======================================================
 
@@ -67,11 +54,7 @@ bool app_start(char *err_str)
 
 	game_time_initialize();
 	
-		// math utility initialization
-		
-	fast_trig_setup();
-	
-		// ray tracing structures
+		// physics ray tracing
 		
 	if (!ray_trace_initialize(err_str)) return(FALSE);
 	
@@ -79,64 +62,36 @@ bool app_start(char *err_str)
 		
 	net_initialize();
 	
-		// start console
-		
-	console_initialize();
-	console_add_system("Starting App");
-	
 		// read setup preferences
 		
 	setup_xml_read();
 	
 		// client network defaults
 		
-	net_setup.host.hosting=FALSE;
-	net_setup.client.joined=FALSE;
+	net_setup.mode=net_mode_none;
 	
 		// initialize server
 		
 	if (!server_initialize(err_str)) return(FALSE);
 
 		// initialize view
-		
-	if (!view_initialize(err_str)) {
-		server_shutdown();
-		return(FALSE);
+		// if not running in dedicated host mode
+	
+	if (!app.dedicated_host) {
+
+		if (!view_initialize(err_str)) {
+			server_shutdown();
+			return(FALSE);
+		}
+
+		console_initialize();
 	}
 
-		// if no editor launch, start in intro
-		
-	if (!setup.editor_override.on) {
-		server.state=gs_intro;
-		intro_open();
-		return(TRUE);
-	}
-	
-		// launch directly into map
-		
-	server.state=gs_running;
-		
-	if (!game_start(skill_medium,NULL,err_str)) {
-		view_shutdown();
-		server_shutdown();
-		return(FALSE);
-	}
-	
-	if (!map_start(TRUE,err_str)) {
-		game_end();
-		view_shutdown();
-		server_shutdown();
-		return(FALSE);
-	}
-
-	input_clear();
-	
 	return(TRUE);
 }
 
 void app_end(void)
 {
-		
 	if (server.map_open) map_end();
 	if (server.game_open) game_end();
 	
@@ -146,18 +101,134 @@ void app_end(void)
 	
 		// shutdown view
 		
-	view_shutdown();
+	if (!app.dedicated_host) view_shutdown();
 	
+		// physics ray tracing
+		
+	ray_trace_shutdown();
+
 		// shutdown server
 		
 	server_shutdown();
 	
-		// ray trace cleanup
-		
-	ray_trace_shutdown();
-	
 		// OS network shutdown
 		
 	net_shutdown();
+}
+
+/* =======================================================
+
+      App Start and End
+      
+======================================================= */
+
+bool app_run_intro(char *err_str)
+{
+		// start in intro or title media
+		// we hard-set the state here as there
+		// is no previous state
+		
+		// is there a title?
+
+	if (iface.logo.name[0]!=0x0) {
+		if (!title_setup(gs_intro,"Titles",iface.logo.name,iface.logo.sound,iface.logo.life_msec,-1,err_str)) return(FALSE);
+		title_open();
+		return(TRUE);
+	}
+
+		// if not go right to intro
+
+	server.state=gs_intro;
+
+	intro_open();
+
+	return(TRUE);
+}
+	
+bool app_run_editor_launch(char *err_str)
+{
+		// launch directly into map
+		
+	server.state=gs_running;
+	net_setup.mode=net_mode_none;
+		
+	if (!game_start(FALSE,skill_medium,0,0,err_str)) return(FALSE);
+	
+	if (!map_start(FALSE,TRUE,err_str)) {
+		game_end();
+		return(FALSE);
+	}
+	
+	return(TRUE);
+}
+
+bool app_run_dedicated_host(char *err_str)
+{
+	char			str[256];
+
+		// launch directly into hosting
+		// setup hosting flags and IPs
+		
+	host_game_setup();
+	net_host_game_setup();
+
+	net_setup.mode=net_mode_host;
+	net_setup.client.latency=0;
+	net_setup.client.host_addr.ip=0;
+	net_setup.client.host_addr.port=0;
+	
+	net_create_project_hash();
+
+		// setup map
+		
+	map.info.name[0]=0x0;
+	strcpy(map.info.host_name,setup.network.map_list.maps[net_setup.host.current_map_idx].name);
+	
+		// start game
+	
+	if (!game_start(FALSE,skill_medium,0,0,err_str)) {
+		net_host_game_end();
+		return(FALSE);
+	}
+	
+		// add any multiplayer bots
+		
+	if (!game_multiplayer_bots_create(err_str)) {
+		game_end();
+		net_host_game_end();
+		return(FALSE);
+	}
+	
+		// start the map
+		
+	if (!map_start(FALSE,TRUE,err_str)) {
+		game_end();
+		net_host_game_end();
+		return(FALSE);
+	}
+
+		// start hosting
+
+	if (!net_host_game_start(err_str)) {
+		map_end();
+		game_end();
+		net_host_game_end();
+		return(FALSE);
+	}
+
+		// dedicated hosting, no local
+		// player to add, only add
+		// multiplayer bots to host
+
+	net_host_join_multiplayer_bots();
+
+		// game is running
+
+	sprintf(str,"Running on %s...",net_setup.host.ip_resolve);
+	console_add(str);
+	
+	server.next_state=gs_running;
+
+	return(TRUE);
 }
 

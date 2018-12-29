@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,44 +29,41 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "effects.h"
 #include "scripts.h"
-#include "physics.h"
 
+extern iface_type		iface;
 extern server_type		server;
 extern js_type			js;
 
-JSBool js_spawn_particle_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_particle_moving_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_particle_line_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_ring_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_ring_line_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_flash_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_lightning_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_ray_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_ray_team_color_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_shake_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
-JSBool js_spawn_push_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval);
+JSValueRef js_spawn_particle_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_particle_moving_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_particle_line_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_ring_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_ring_line_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_flash_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_lightning_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_ray_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_ray_team_color_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_shake_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
+JSValueRef js_spawn_push_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception);
 
-JSClass			spawn_class={"spawn_class",0,
-							script_add_property,JS_PropertyStub,
-							JS_PropertyStub,JS_PropertyStub,
-							JS_EnumerateStub,JS_ResolveStub,JS_ConvertStub,JS_FinalizeStub};
+JSStaticFunction	spawn_functions[]={
+							{"particle",			js_spawn_particle_func,				kJSPropertyAttributeDontDelete},
+							{"particleMoving",		js_spawn_particle_moving_func,		kJSPropertyAttributeDontDelete},
+							{"particleLine",		js_spawn_particle_line_func,		kJSPropertyAttributeDontDelete},
+							{"ring",				js_spawn_ring_func,					kJSPropertyAttributeDontDelete},
+							{"ringLine",			js_spawn_ring_line_func,			kJSPropertyAttributeDontDelete},
+							{"flash",				js_spawn_flash_func,				kJSPropertyAttributeDontDelete},
+							{"lightning",			js_spawn_lightning_func,			kJSPropertyAttributeDontDelete},
+							{"ray",					js_spawn_ray_func,					kJSPropertyAttributeDontDelete},
+							{"rayTeamColor",		js_spawn_ray_team_color_func,		kJSPropertyAttributeDontDelete},
+							{"shake",				js_spawn_shake_func,				kJSPropertyAttributeDontDelete},
+							{"push",				js_spawn_push_func,					kJSPropertyAttributeDontDelete},
+							{0,0,0}};
 
-script_js_function	spawn_functions[]={
-							{"particle",			js_spawn_particle_func,				4},
-							{"particleMoving",		js_spawn_particle_moving_func,		7},
-							{"particleLine",		js_spawn_particle_line_func,		8},
-							{"ring",				js_spawn_ring_func,					4},
-							{"ringLine",			js_spawn_ring_line_func,			8},
-							{"flash",				js_spawn_flash_func,				9},
-							{"lightning",			js_spawn_lightning_func,			12},
-							{"ray",					js_spawn_ray_func,					11},
-							{"rayTeamColor",		js_spawn_ray_team_color_func,		7},
-							{"shake",				js_spawn_shake_func,				6},
-							{"push",				js_spawn_push_func,					5},
-							{0}};
+JSClassRef			spawn_class;
 
 /* =======================================================
 
@@ -74,9 +71,41 @@ script_js_function	spawn_functions[]={
       
 ======================================================= */
 
-void script_add_global_spawn_object(JSObject *parent_obj)
+void script_init_global_spawn_object(void)
 {
-	script_create_child_object(parent_obj,"spawn",&spawn_class,NULL,spawn_functions);
+	spawn_class=script_create_class("spawn_class",NULL,spawn_functions);
+}
+
+void script_free_global_spawn_object(void)
+{
+	script_free_class(spawn_class);
+}
+
+JSObjectRef script_add_global_spawn_object(JSContextRef cx,JSObjectRef parent_obj,int script_idx)
+{
+	return(script_create_child_object(cx,parent_obj,spawn_class,"spawn",script_idx));
+}
+
+/* =======================================================
+
+      Spawn Exceptions
+      
+======================================================= */
+
+JSValueRef js_particle_name_exception(JSContextRef cx,char *name)
+{
+	char			err_str[256];
+
+	sprintf(err_str,"Named particle does not exist: %s",name);
+	return(script_create_exception(cx,err_str));
+}
+
+JSValueRef js_ring_name_exception(JSContextRef cx,char *name)
+{
+	char			err_str[256];
+
+	sprintf(err_str,"Named ring does not exist: %s",name);
+	return(script_create_exception(cx,err_str));
 }
 
 /* =======================================================
@@ -85,100 +114,75 @@ void script_add_global_spawn_object(JSObject *parent_obj)
       
 ======================================================= */
 
-JSBool js_spawn_particle_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_particle_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	int				idx;
 	char			name[name_str_len];
-	d3pnt			pt;
-	
-	pt.x=JSVAL_TO_INT(argv[0]);
-	pt.z=JSVAL_TO_INT(argv[1]);
-	pt.y=JSVAL_TO_INT(argv[2]);
-	
-	script_value_to_string(argv[3],name,name_str_len);
+	d3pnt			pnt;
+
+	if (!script_check_param_count(cx,func,argc,2,exception)) return(script_null_to_value(cx));
+
+	script_value_to_point(cx,argv[0],&pnt);
+	script_value_to_string(cx,argv[1],name,name_str_len);
 	
 	idx=particle_find_index(name);
 	if (idx==-1) {
-		JS_ReportError(js.cx,"Named particle does not exist: %s",name);
-		return(JS_FALSE);
+		*exception=js_particle_name_exception(cx,name);
 	}
-	
-	if (!particle_spawn(idx,script_get_attached_object_uid(),&pt,NULL,NULL)) {
-		*rval=JSVAL_FALSE;
+	else {
+		script_bool_to_value(cx,particle_spawn(idx,script_get_attached_object_uid(j_obj),&pnt,NULL,NULL));
 	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
-    
-	return(JS_TRUE);
+
+	return(script_null_to_value(cx));
 }
 
-JSBool js_spawn_particle_moving_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_particle_moving_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	int				idx;
 	char			name[name_str_len];
-	d3pnt			pt;
+	d3pnt			pnt;
 	particle_motion	motion;
-	
-	pt.x=JSVAL_TO_INT(argv[0]);
-	pt.z=JSVAL_TO_INT(argv[1]);
-	pt.y=JSVAL_TO_INT(argv[2]);
+
+	if (!script_check_param_count(cx,func,argc,3,exception)) return(script_null_to_value(cx));
 	
 	motion.bone_idx=-1;
-	motion.vct.x=script_value_to_float(argv[3]);
-	motion.vct.z=script_value_to_float(argv[4]);
-	motion.vct.y=script_value_to_float(argv[5]);
-
-	script_value_to_string(argv[6],name,name_str_len);
+	script_value_to_point(cx,argv[0],&pnt);
+	script_value_to_vector(cx,argv[1],&motion.vct);
+	script_value_to_string(cx,argv[2],name,name_str_len);
 	
 	idx=particle_find_index(name);
 	if (idx==-1) {
-		JS_ReportError(js.cx,"Named particle does not exist: %s",name);
-		return(JS_FALSE);
+		*exception=js_particle_name_exception(cx,name);
 	}
-	
-	if (!particle_spawn(idx,script_get_attached_object_uid(),&pt,NULL,&motion)) {
-		*rval=JSVAL_FALSE;
+	else {
+		script_bool_to_value(cx,particle_spawn(idx,script_get_attached_object_uid(j_obj),&pnt,NULL,&motion));
 	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
-    
-	return(JS_TRUE);
+
+	return(script_null_to_value(cx));
 }
 
-JSBool js_spawn_particle_line_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_particle_line_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	int				idx,count;
 	char			name[name_str_len];
-	d3pnt			start_pt,end_pt;
+	d3pnt			start_pnt,end_pnt;
+
+	if (!script_check_param_count(cx,func,argc,4,exception)) return(script_null_to_value(cx));
 	
-	start_pt.x=JSVAL_TO_INT(argv[0]);
-	start_pt.z=JSVAL_TO_INT(argv[1]);
-	start_pt.y=JSVAL_TO_INT(argv[2]);
-
-	end_pt.x=JSVAL_TO_INT(argv[3]);
-	end_pt.z=JSVAL_TO_INT(argv[4]);
-	end_pt.y=JSVAL_TO_INT(argv[5]);
-
-	count=JSVAL_TO_INT(argv[6]);
-
-	script_value_to_string(argv[7],name,name_str_len);
+	script_value_to_point(cx,argv[0],&start_pnt);
+	script_value_to_point(cx,argv[1],&end_pnt);
+	count=script_value_to_int(cx,argv[2]);
+	script_value_to_string(cx,argv[3],name,name_str_len);
 	
 	idx=particle_find_index(name);
 	if (idx==-1) {
-		JS_ReportError(js.cx,"Named particle does not exist: %s",name);
-		return(JS_FALSE);
+		*exception=js_particle_name_exception(cx,name);
 	}
-	
-	if (!particle_line_spawn(idx,script_get_attached_object_uid(),&start_pt,&end_pt,count)) {
-		*rval=JSVAL_FALSE;
+	else {
+		script_bool_to_value(cx,particle_line_spawn(idx,script_get_attached_object_uid(j_obj),&start_pnt,&end_pnt,count));
 	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
-    
-	return(JS_TRUE);
+
+	return(script_null_to_value(cx));
 }
 
 /* =======================================================
@@ -187,66 +191,50 @@ JSBool js_spawn_particle_line_func(JSContext *cx,JSObject *j_obj,uintN argc,jsva
       
 ======================================================= */
 
-JSBool js_spawn_ring_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_ring_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	int				idx;
 	char			name[name_str_len];
-	d3pnt			pt;
+	d3pnt			pnt;
+
+	if (!script_check_param_count(cx,func,argc,2,exception)) return(script_null_to_value(cx));
 	
-	pt.x=JSVAL_TO_INT(argv[0]);
-	pt.z=JSVAL_TO_INT(argv[1]);
-	pt.y=JSVAL_TO_INT(argv[2]);
-	
-	script_value_to_string(argv[3],name,name_str_len);
+	script_value_to_point(cx,argv[0],&pnt);
+	script_value_to_string(cx,argv[1],name,name_str_len);
 	
 	idx=ring_find_index(name);
 	if (idx==-1) {
-		JS_ReportError(js.cx,"Named ring does not exist: %s",name);
-		return(JS_FALSE);
+		*exception=js_ring_name_exception(cx,name);
 	}
-	
-	if (!ring_spawn(idx,script_get_attached_object_uid(),&pt,NULL)) {
-		*rval=JSVAL_FALSE;
+	else {
+		script_bool_to_value(cx,ring_spawn(idx,script_get_attached_object_uid(j_obj),&pnt,NULL));
 	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
-    
-	return(JS_TRUE);
+
+	return(script_null_to_value(cx));
 }
 
-JSBool js_spawn_ring_line_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_ring_line_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	int				idx,count;
 	char			name[name_str_len];
-	d3pnt			start_pt,end_pt;
+	d3pnt			start_pnt,end_pnt;
+
+	if (!script_check_param_count(cx,func,argc,4,exception)) return(script_null_to_value(cx));
 	
-	start_pt.x=JSVAL_TO_INT(argv[0]);
-	start_pt.z=JSVAL_TO_INT(argv[1]);
-	start_pt.y=JSVAL_TO_INT(argv[2]);
-
-	end_pt.x=JSVAL_TO_INT(argv[3]);
-	end_pt.z=JSVAL_TO_INT(argv[4]);
-	end_pt.y=JSVAL_TO_INT(argv[5]);
-
-	count=JSVAL_TO_INT(argv[6]);
-
-	script_value_to_string(argv[7],name,name_str_len);
+	script_value_to_point(cx,argv[0],&start_pnt);
+	script_value_to_point(cx,argv[1],&end_pnt);
+	count=script_value_to_int(cx,argv[2]);
+	script_value_to_string(cx,argv[3],name,name_str_len);
 	
 	idx=ring_find_index(name);
 	if (idx==-1) {
-		JS_ReportError(js.cx,"Named ring does not exist: %s",name);
-		return(JS_FALSE);
+		*exception=js_ring_name_exception(cx,name);
 	}
-	
-	if (!ring_line_spawn(idx,script_get_attached_object_uid(),&start_pt,&end_pt,count)) {
-		*rval=JSVAL_FALSE;
+	else {
+		script_bool_to_value(cx,ring_line_spawn(idx,script_get_attached_object_uid(j_obj),&start_pnt,&end_pnt,count));
 	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
-    
-	return(JS_TRUE);
+
+	return(script_null_to_value(cx));
 }
 
 /* =======================================================
@@ -255,32 +243,23 @@ JSBool js_spawn_ring_line_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *a
       
 ======================================================= */
 
-JSBool js_spawn_flash_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_flash_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	int				intensity,flash_msec,fade_msec;
-	d3pnt			pt;
+	d3pnt			pnt;
 	d3col			col;
+
+	if (!script_check_param_count(cx,func,argc,5,exception)) return(script_null_to_value(cx));
 	
-	pt.x=JSVAL_TO_INT(argv[0]);
-	pt.z=JSVAL_TO_INT(argv[1]);
-	pt.y=JSVAL_TO_INT(argv[2]);
+	script_value_to_point(cx,argv[0],&pnt);
+	script_value_to_color(cx,argv[1],&col);
+	intensity=script_value_to_int(cx,argv[2]);
+	flash_msec=script_value_to_int(cx,argv[3]);
+	fade_msec=script_value_to_int(cx,argv[4]);
 
-	col.r=script_value_to_float(argv[3]);
-	col.g=script_value_to_float(argv[4]);
-	col.b=script_value_to_float(argv[5]);
-
-	intensity=JSVAL_TO_INT(argv[6]);
-	flash_msec=JSVAL_TO_INT(argv[7]);
-	fade_msec=JSVAL_TO_INT(argv[8]);
-
-	if (!effect_spawn_flash(&pt,&col,intensity,flash_msec,fade_msec)) {
-		*rval=JSVAL_FALSE;
-	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
+	script_bool_to_value(cx,effect_spawn_flash(&pnt,&col,intensity,1.0f,flash_msec,fade_msec));
     
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
 /* =======================================================
@@ -289,38 +268,25 @@ JSBool js_spawn_flash_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,
       
 ======================================================= */
 
-JSBool js_spawn_lightning_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_lightning_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	int				wid,life_msec;
 	float			varient;
-	d3pnt			start_pt,end_pt;
+	d3pnt			start_pnt,end_pnt;
 	d3col			col;
-	
-	start_pt.x=JSVAL_TO_INT(argv[0]);
-	start_pt.z=JSVAL_TO_INT(argv[1]);
-	start_pt.y=JSVAL_TO_INT(argv[2]);
 
-	end_pt.x=JSVAL_TO_INT(argv[3]);
-	end_pt.z=JSVAL_TO_INT(argv[4]);
-	end_pt.y=JSVAL_TO_INT(argv[5]);
-	
-	wid=JSVAL_TO_INT(argv[6]);
-	varient=script_value_to_float(argv[7]);
+	if (!script_check_param_count(cx,func,argc,6,exception)) return(script_null_to_value(cx));
 
-	col.r=script_value_to_float(argv[8]);
-	col.g=script_value_to_float(argv[9]);
-	col.b=script_value_to_float(argv[10]);
+	script_value_to_point(cx,argv[0],&start_pnt);
+	script_value_to_point(cx,argv[1],&end_pnt);
+	wid=script_value_to_int(cx,argv[2]);
+	varient=script_value_to_float(cx,argv[3]);
+	script_value_to_color(cx,argv[4],&col);
+	life_msec=script_value_to_int(cx,argv[5]);
 
-	life_msec=JSVAL_TO_INT(argv[11]);
-
-	if (!effect_spawn_lightning(js.time.current_tick,&start_pt,&end_pt,wid,varient,&col,life_msec)) {
-		*rval=JSVAL_FALSE;
-	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
+	script_bool_to_value(cx,effect_spawn_lightning(&start_pnt,&end_pnt,wid,varient,&col,life_msec));
     
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
 /* =======================================================
@@ -329,75 +295,52 @@ JSBool js_spawn_lightning_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *a
       
 ======================================================= */
 
-JSBool js_spawn_ray_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_ray_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	int				wid,life_msec;
-	d3pnt			start_pt,end_pt;
+	d3pnt			start_pnt,end_pnt;
 	d3col			col;
+
+	if (!script_check_param_count(cx,func,argc,5,exception)) return(script_null_to_value(cx));
 	
-	start_pt.x=JSVAL_TO_INT(argv[0]);
-	start_pt.z=JSVAL_TO_INT(argv[1]);
-	start_pt.y=JSVAL_TO_INT(argv[2]);
+	script_value_to_point(cx,argv[0],&start_pnt);
+	script_value_to_point(cx,argv[1],&end_pnt);
+	wid=script_value_to_int(cx,argv[2]);
+	script_value_to_color(cx,argv[3],&col);
+	life_msec=script_value_to_int(cx,argv[4]);
 
-	end_pt.x=JSVAL_TO_INT(argv[3]);
-	end_pt.z=JSVAL_TO_INT(argv[4]);
-	end_pt.y=JSVAL_TO_INT(argv[5]);
-	
-	wid=JSVAL_TO_INT(argv[6]);
-
-	col.r=script_value_to_float(argv[7]);
-	col.g=script_value_to_float(argv[8]);
-	col.b=script_value_to_float(argv[9]);
-
-	life_msec=JSVAL_TO_INT(argv[10]);
-
-	if (!effect_spawn_ray(&start_pt,&end_pt,wid,&col,life_msec)) {
-		*rval=JSVAL_FALSE;
-	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
+	script_bool_to_value(cx,effect_spawn_ray(&start_pnt,&end_pnt,wid,&col,life_msec));
     
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
-JSBool js_spawn_ray_team_color_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_ray_team_color_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
-	int				wid,life_msec,obj_uid;
-	d3pnt			start_pt,end_pt;
+	int				wid,life_msec,obj_idx;
+	d3pnt			start_pnt,end_pnt;
 	d3col			col;
 	obj_type		*obj;
-	
-	start_pt.x=JSVAL_TO_INT(argv[0]);
-	start_pt.z=JSVAL_TO_INT(argv[1]);
-	start_pt.y=JSVAL_TO_INT(argv[2]);
 
-	end_pt.x=JSVAL_TO_INT(argv[3]);
-	end_pt.z=JSVAL_TO_INT(argv[4]);
-	end_pt.y=JSVAL_TO_INT(argv[5]);
+	if (!script_check_param_count(cx,func,argc,4,exception)) return(script_null_to_value(cx));
 	
-	wid=JSVAL_TO_INT(argv[6]);
-
-	life_msec=JSVAL_TO_INT(argv[7]);
+	script_value_to_point(cx,argv[0],&start_pnt);
+	script_value_to_point(cx,argv[1],&end_pnt);
+	wid=script_value_to_int(cx,argv[2]);
+	life_msec=script_value_to_int(cx,argv[3]);
 
 		// team color
 
 	col.r=col.g=col.b=1.0f;
 
-	obj_uid=script_get_attached_object_uid();
-	if (obj_uid!=-1) {
-		obj=object_find_uid(obj_uid);
+	obj_idx=script_get_attached_object_uid(j_obj);
+	if (obj_idx!=-1) {
+		obj=server.obj_list.objs[obj_idx];
 		if (obj!=NULL) object_get_tint(obj,&col);
 	}
 
-	if (!effect_spawn_ray(&start_pt,&end_pt,wid,&col,life_msec)) {
-		*rval=JSVAL_FALSE;
-	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
+	script_bool_to_value(cx,effect_spawn_ray(&start_pnt,&end_pnt,wid,&col,life_msec));
     
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
 /* =======================================================
@@ -406,28 +349,21 @@ JSBool js_spawn_ray_team_color_func(JSContext *cx,JSObject *j_obj,uintN argc,jsv
       
 ======================================================= */
 
-JSBool js_spawn_shake_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_shake_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
 	int				dist,sz,life_msec;
-	d3pnt			pt;
+	d3pnt			pnt;
+
+	if (!script_check_param_count(cx,func,argc,4,exception)) return(script_null_to_value(cx));
 	
-	pt.x=JSVAL_TO_INT(argv[0]);
-	pt.z=JSVAL_TO_INT(argv[1]);
-	pt.y=JSVAL_TO_INT(argv[2]);
+	script_value_to_point(cx,argv[0],&pnt);
+	dist=script_value_to_int(cx,argv[1]);
+	sz=script_value_to_int(cx,argv[2]);
+	life_msec=script_value_to_int(cx,argv[3]);
+	
+	script_bool_to_value(cx,effect_spawn_shake(&pnt,dist,sz,life_msec));
     
-    dist=JSVAL_TO_INT(argv[3]);
-	
-	sz=JSVAL_TO_INT(argv[4]);
-	life_msec=JSVAL_TO_INT(argv[5]);
-	
-	if (!effect_spawn_shake(&pt,dist,sz,life_msec)) {
-		*rval=JSVAL_FALSE;
-	}
-    else {
-		*rval=JSVAL_TRUE;
-	}
-    
-	return(JS_TRUE);
+	return(script_null_to_value(cx));
 }
 
 /* =======================================================
@@ -436,20 +372,18 @@ JSBool js_spawn_shake_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,
       
 ======================================================= */
 
-JSBool js_spawn_push_func(JSContext *cx,JSObject *j_obj,uintN argc,jsval *argv,jsval *rval)
+JSValueRef js_spawn_push_func(JSContextRef cx,JSObjectRef func,JSObjectRef j_obj,size_t argc,const JSValueRef argv[],JSValueRef *exception)
 {
-	int				x,z,y,radius,force;
-	
-	x=JSVAL_TO_INT(argv[0]);
-	z=JSVAL_TO_INT(argv[1]);
-	y=JSVAL_TO_INT(argv[2]);
-	
-	radius=JSVAL_TO_INT(argv[3]);
-	force=JSVAL_TO_INT(argv[4]);
+	int				radius,force;
+	d3pnt			push_pnt;
 
-	collide_push_objects(x,y,z,radius,force);
-	*rval=JSVAL_TRUE;
+	if (!script_check_param_count(cx,func,argc,3,exception)) return(script_null_to_value(cx));
 	
-	return(JS_TRUE);
+	script_value_to_point(cx,argv[0],&push_pnt);
+	radius=script_value_to_int(cx,argv[1]);
+	force=script_value_to_int(cx,argv[2]);
+
+	collide_objects_push(&push_pnt,radius,force);
+	return(script_bool_to_value(cx,TRUE));
 }
 

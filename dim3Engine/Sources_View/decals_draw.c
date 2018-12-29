@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,17 +29,14 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
-#include "effects.h"
-#include "consoles.h"
-#include "lights.h"
-#include "video.h"
+#include "interface.h"
 
 extern map_type			map;
-extern server_type		server;
 extern view_type		view;
+extern server_type		server;
+extern iface_type		iface;
 extern setup_type		setup;
 
-extern int game_time_get(void);
 extern bool view_mesh_in_draw_list(int mesh_idx);
 
 /* =======================================================
@@ -48,42 +45,58 @@ extern bool view_mesh_in_draw_list(int mesh_idx);
       
 ======================================================= */
 
-void decal_render_stencil(map_mesh_type *mesh,map_mesh_poly_type *mesh_poly,int stencil_idx)
+void decal_render_stencil(map_mesh_type *mesh,map_mesh_poly_type *poly,int stencil_idx)
 {
 	int			n;
+	float		*vp;
 	d3pnt		*pt;
 
 		// already stenciled for decal?
 
-	if (mesh_poly->draw.decal_stencil_idx!=0) return;
+	if (poly->draw.decal_stencil_idx!=0) return;
 
-		// stencil
+		// setup vertex ptr
 
-	glStencilFunc(GL_ALWAYS,stencil_idx,0xFF);
+	view_bind_utility_vertex_object();
+	vp=(float*)view_map_utility_vertex_object();
 
-	glBegin(GL_POLYGON);
-
-	for (n=0;n!=mesh_poly->ptsz;n++) {
-		pt=&mesh->vertexes[mesh_poly->v[n]];
-		glVertex3i(pt->x,pt->y,pt->z);
+	for (n=0;n!=poly->ptsz;n++) {
+		pt=&mesh->vertexes[poly->v[n]];
+		*vp++=(float)pt->x;
+		*vp++=(float)pt->y;
+		*vp++=(float)pt->z;
 	}
 	
-	glEnd();
+	view_unmap_utility_vertex_object();
+	
+		// stencil
+
+	gl_shader_draw_execute_simple_black_start(3,0,1.0f);
+
+	glStencilFunc(GL_ALWAYS,stencil_idx,0xFF);
+	glDrawArrays(GL_TRIANGLE_FAN,0,poly->ptsz);
+
+	gl_shader_draw_execute_simple_black_end();
 
 		// remember stencil
 
-	mesh_poly->draw.decal_stencil_idx=stencil_idx;
+	poly->draw.decal_stencil_idx=stencil_idx;
+	
+	view_unbind_utility_vertex_object();
 }
 
 void decal_render_mark(int stencil_idx,decal_type *decal)
 {
-	int				k,tick,fade_out_start_tick;
-	float			alpha,g_size,gx,gy,cf[3];
-	mark_type		*mark;
+	int					k,tick,fade_out_start_tick;
+	float				alpha,g_size,gx,gy;
+	float				cf[3];
+	float				*vp;
+	d3col				col;
+	iface_mark_type		*mark;
 	
 		// get the alpha
 	
-	mark=&server.marks[decal->mark_idx];
+	mark=&iface.mark_list.marks[decal->mark_idx];
 		
 	alpha=decal->alpha;
 	tick=game_time_get()-decal->start_tick;
@@ -110,65 +123,95 @@ void decal_render_mark(int stencil_idx,decal_type *decal)
 	
 		// get the decal image
 		
-	effect_image_animate_get_uv(tick,&mark->animate,&gx,&gy,&g_size);
+	effect_image_animate_get_uv(tick,0,&mark->animate,&gx,&gy,&g_size);
 
 		// get lighting
 		
 	if (mark->hilite) {
-		cf[0]=decal->tint.r;
-		cf[1]=decal->tint.g;
-		cf[2]=decal->tint.b;
+		col.r=col.g=col.b=1.0f;
 	}
 	else {
-		gl_lights_calc_vertex((double)decal->x[0],(double)decal->y[0],(double)decal->z[0],cf);
-		cf[0]*=decal->tint.r;
-		cf[1]*=decal->tint.g;
-		cf[2]*=decal->tint.b;
+		gl_lights_calc_color((float)decal->x[0],(float)decal->y[0],(float)decal->z[0],cf);
+		col.r=cf[0];
+		col.g=cf[1];
+		col.b=cf[2];
 	}
 
+		// setup vertex ptr
+
+	view_bind_utility_vertex_object();
+	vp=(float*)view_map_utility_vertex_object();
+
+    *vp++=(float)decal->x[0];
+	*vp++=(float)decal->y[0];
+	*vp++=(float)decal->z[0];
+
+    *vp++=gx;
+	*vp++=gy;
+
+    *vp++=(float)decal->x[3];
+	*vp++=(float)decal->y[3];
+	*vp++=(float)decal->z[3];
+
+    *vp++=gx;
+	*vp++=gy+g_size;
+
+    *vp++=(float)decal->x[1];
+	*vp++=(float)decal->y[1];
+	*vp++=(float)decal->z[1];
+
+    *vp++=gx+g_size;
+	*vp++=gy;
+
+    *vp++=(float)decal->x[2];
+	*vp++=(float)decal->y[2];
+	*vp++=(float)decal->z[2];
+
+    *vp++=gx+g_size;
+	*vp++=gy+g_size;
+	
+	view_unmap_utility_vertex_object();
 	
          // draw the polygon
+
+	gl_shader_draw_execute_simple_bitmap_set_texture(view_images_get_gl_id(mark->image_idx));
+	gl_shader_draw_execute_simple_bitmap_start(3,0,(3*sizeof(float)),((3+2)*sizeof(float)),&col,alpha);
 			
 	glStencilFunc(GL_EQUAL,stencil_idx,0xFF);
-	gl_texture_decal_set(view_images_get_gl_id(server.marks[decal->mark_idx].image_idx),cf[0],cf[1],cf[2],alpha);
+	glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+
+	gl_shader_draw_execute_simple_bitmap_end();
 	
-	glBegin(GL_QUADS);
-    glTexCoord2f(gx,gy);
-    glVertex3i(decal->x[0],decal->y[0],decal->z[0]);
-    glTexCoord2f((gx+g_size),gy);
-    glVertex3i(decal->x[1],decal->y[1],decal->z[1]);
-    glTexCoord2f((gx+g_size),(gy+g_size));
-    glVertex3i(decal->x[2],decal->y[2],decal->z[2]);
-    glTexCoord2f(gx,(gy+g_size));
-    glVertex3i(decal->x[3],decal->y[3],decal->z[3]);
-    glEnd();
+	view_unbind_utility_vertex_object();
 }
 
 void decal_render(void)
 {
 	int					n,stencil_idx;
+	bool				has_decal;
 	decal_type			*decal;
 	map_mesh_type		*mesh;
-	map_mesh_poly_type	*mesh_poly;
-
-	if (server.count.decal==0) return;
+	map_mesh_poly_type	*poly;
 
 		// clear all rendering stencil marks
 		// and detect if in view
 
-	decal=server.decals;
-
-	for (n=0;n!=server.count.decal;n++) {
+	has_decal=FALSE;
+	
+	for (n=0;n!=max_decal_list;n++) {
+		decal=server.decal_list.decals[n];
+		if (!decal->on) continue;
 	
 		decal->in_view=view_mesh_in_draw_list(decal->mesh_idx);
 		
 		if (decal->in_view) {
-			mesh_poly=&map.mesh.meshes[decal->mesh_idx].polys[decal->poly_idx];
-			mesh_poly->draw.decal_stencil_idx=0;
+			poly=&map.mesh.meshes[decal->mesh_idx].polys[decal->poly_idx];
+			poly->draw.decal_stencil_idx=0;
+			has_decal=TRUE;
 		}
-		
-		decal++;
 	}
+	
+	if (!has_decal) return;
 
 		// decals use stenciling
 
@@ -177,61 +220,48 @@ void decal_render(void)
 		// stencil decal segments
 
 	glDisable(GL_BLEND);
-			
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_NOTEQUAL,0);
 
 	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LEQUAL);
 	glDepthMask(GL_FALSE);
 
 	glColorMask(GL_FALSE,GL_FALSE,GL_FALSE,GL_FALSE);
 
 	glStencilOp(GL_KEEP,GL_KEEP,GL_REPLACE);
 
-	glColor4f(0.0f,0.0f,0.0f,1.0f);
-
 	stencil_idx=stencil_poly_start;
-	decal=server.decals;
 
-	for (n=0;n!=server.count.decal;n++) {
+	for (n=0;n!=max_decal_list;n++) {
+		decal=server.decal_list.decals[n];
+		if (!decal->on) continue;
 
 		if (decal->in_view) {
 			mesh=&map.mesh.meshes[decal->mesh_idx];
-			mesh_poly=&mesh->polys[decal->poly_idx];
-			decal_render_stencil(mesh,mesh_poly,stencil_idx);
+			poly=&mesh->polys[decal->poly_idx];
+			decal_render_stencil(mesh,poly,stencil_idx);
 			stencil_idx++;
 		}
-		
-		decal++;
 	}
 
 	glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
+	glDepthMask(GL_TRUE);
 
 		// draw decals to stencils
 
-	gl_texture_decal_start();
-				
 	glEnable(GL_BLEND);
-	
 	glDisable(GL_DEPTH_TEST);
 			
 	glStencilOp(GL_KEEP,GL_KEEP,GL_KEEP);
 
-	decal=server.decals;
-
-	for (n=0;n!=server.count.decal;n++) {
+	for (n=0;n!=max_decal_list;n++) {
+		decal=server.decal_list.decals[n];
+		if (!decal->on) continue;
 	
 		if (decal->in_view) {
-			mesh_poly=&map.mesh.meshes[decal->mesh_idx].polys[decal->poly_idx];
-			decal_render_mark(mesh_poly->draw.decal_stencil_idx,decal);
+			poly=&map.mesh.meshes[decal->mesh_idx].polys[decal->poly_idx];
+			decal_render_mark(poly->draw.decal_stencil_idx,decal);
 		}
-		
-		decal++;
 	}
 
-	gl_texture_decal_end();
-	
 	glDisable(GL_STENCIL_TEST);
 }
 

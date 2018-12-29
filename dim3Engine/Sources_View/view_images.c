@@ -21,7 +21,7 @@ Any non-engine product (games, etc) created with this code is free
 from any and all payment and/or royalties to the author of dim3,
 and can be sold or given away.
 
-(c) 2000-2007 Klink! Software www.klinksoftware.com
+(c) 2000-2012 Klink! Software www.klinksoftware.com
  
 *********************************************************************/
 
@@ -29,185 +29,446 @@ and can be sold or given away.
 	#include "dim3engine.h"
 #endif
 
+#include "interface.h"
 #include "objects.h"
-#include "remotes.h"
-#include "consoles.h"
-#include "interfaces.h"
-#include "effects.h"
-#include "video.h"
 
 extern server_type			server;
 extern view_type			view;
-extern hud_type				hud;
+extern iface_type			iface;
 extern setup_type			setup;
 extern network_setup_type	net_setup;
+extern file_path_setup_type	file_path_setup;
 
-extern int					remote_slow_image_idx,remote_talk_image_idx;
+int							remote_slow_image_idx,remote_talk_image_idx;
+bitmap_type					empty_bitmap;
 
 /* =======================================================
 
-      Load Images
+      Initialize Images
       
 ======================================================= */
 
-int view_images_load_single(char *path,bool simple)
+void view_images_initialize(void)
 {
-	int					n,idx;
+	int				n;
+	d3col			col;
+	view_image_type	*image;
+	
+	image=view.images;
+	
+	for (n=0;n!=max_view_image;n++) {
+		image->path[n]=0x0;
+		image++;
+	}
+		
+		// first bitmap is a empty bitmap
+		// to be used when file is missing
+		
+	image=&view.images[0];
+	
+	col.r=col.b=col.g=1.0f;
+	bitmap_color(&image->bitmap,&col);
+	
+	strcpy(image->path,"_dim3_core_empty_bitmap");
+}
+
+void view_images_shutdown(void)
+{
+	view_image_type	*image;
+
+	image=&view.images[0];
+	
+	image->path[0]=0x0;
+	bitmap_close(&image->bitmap);
+}
+
+/* =======================================================
+
+      Load Single Image
+      
+======================================================= */
+
+int view_images_find_path(char *path)
+{
+	int					n;
 	view_image_type		*image;
+	
+	image=view.images;
+
+	for (n=0;n!=max_view_image;n++) {
+		if (image->path[0]!=0x0) {
+			if (strcmp(image->path,path)==0) return(n);
+		}
+		image++;
+	}
+	
+	return(-1);
+}
+
+int view_images_find_first_free(void)
+{
+	int					n;
+	view_image_type		*image;
+	
+	image=view.images;
+
+	for (n=0;n!=max_view_image;n++) {
+		if (image->path[0]==0x0) return(n);
+		image++;
+	}
+	
+	return(-1);
+}
+
+/* =======================================================
+
+      Load Single Image
+      
+======================================================= */
+
+int view_images_load_single(char *path,bool npot,bool simple)
+{
+	int					idx;
+	view_image_type		*image;
+	
+		// null paths get empty image
+		
+	if (path==NULL) return(0);
 
 		// already loaded?
 
-	image=view.images;
-
-	for (n=0;n!=view.count.image;n++) {
-		if (strcmp(image->path,path)==0) return(n);
-		image++;
-	}
-
-		// load it
-
-	idx=view.count.image;
-	view.count.image++;
-
+	idx=view_images_find_path(path);
+	if (idx!=-1) return(idx);
+	
+		// it's a new image
+		// if no free spots, return empty image
+		
+	idx=view_images_find_first_free();
+	if (idx==-1) return(0);
+		
 	image=&view.images[idx];
 
 	if (simple) {
-		bitmap_open(&image->bitmap,path,anisotropic_mode_none,mipmap_mode_none,FALSE,FALSE,FALSE);
+		if (!bitmap_open(&image->bitmap,path,FALSE,FALSE,FALSE,npot,FALSE,FALSE)) return(0);
 	}
 	else {
-		bitmap_open(&image->bitmap,path,setup.anisotropic_mode,setup.mipmap_mode,setup.texture_compression,FALSE,FALSE);
+		if (!bitmap_open(&image->bitmap,path,TRUE,FALSE,FALSE,npot,FALSE,FALSE)) return(0);
 	}
 
 	strcpy(image->path,path);
-
+	
 	return(idx);
 }
 
-void view_images_load(void)
+void view_images_free_single(int idx)
 {
-	int					n;
-	char				path[1024];
-	hud_bitmap_type		*hud_bitmap;
-	hud_radar_icon_type	*icon;
-	halo_type			*halo;
-	mark_type			*mark;
-	crosshair_type		*crosshair;
-	particle_type		*particle;
-	ring_type			*ring;
+	view_image_type		*image;
+	
+		// don't remove first item as it's always the empty one
+		// or -1, which is an error state
+		
+	if (idx<=0) return;
+	
+	image=&view.images[idx];
+	if (image->path[0]==0x0) return;
+	
+		// mark as free
+		
+	image->path[0]=0x0;
+   
+		// close the bitmap
+	
+	bitmap_close(&image->bitmap);
+}
 
-	view.count.image=0;
-    
+/* =======================================================
+
+      Load and Free All Game Cached Images
+      
+======================================================= */
+
+void view_images_cached_load(void)
+{
+	int							n;
+	char						path[1024];
+	iface_bitmap_type			*iface_bitmap;
+	iface_radar_icon_type		*icon;
+	iface_particle_type			*particle;
+	iface_ring_type				*ring;
+ 	iface_mark_type				*mark;
+	iface_halo_type				*halo;
+	iface_label_type			*label;
+	iface_crosshair_type		*crosshair;
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+	iface_virtual_stick_type	*stick;
+	iface_virtual_button_type	*button;
+#endif
+
 		// hud bitmaps
 
-	hud_bitmap=hud.bitmaps;
+	iface_bitmap=iface.bitmap_list.bitmaps;
 	
-	for (n=0;n!=hud.count.bitmap;n++) {
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Interface",hud_bitmap->filename,"png");
-		hud_bitmap->image_idx=view_images_load_single(path,TRUE);
-		hud_bitmap++;
+	for (n=0;n!=iface.bitmap_list.nbitmap;n++) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Interface",iface_bitmap->filename,"png");
+		iface_bitmap->image_idx=view_images_load_single(path,FALSE,TRUE);
+		iface_bitmap++;
 	}
 
-		// radar
+		// radar background
 
-	if (hud.radar.on) {
+	file_paths_data(&file_path_setup,path,"Bitmaps/Radar",iface.radar.background_bitmap_name,"png");
+	iface.radar.background_image_idx=view_images_load_single(path,FALSE,TRUE);
+
+		// radar icons
 	
-			// radar background
-
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Radar",hud.radar.background_bitmap_name,"png");
-		hud.radar.background_image_idx=view_images_load_single(path,TRUE);
-
-			// radar icons
-		
-		icon=hud.radar.icons;
-		
-		for (n=0;n!=hud.radar.nicon;n++) {
-			file_paths_data(&setup.file_path_setup,path,"Bitmaps/Radar",icon->bitmap_name,"png");
-			icon->image_idx=view_images_load_single(path,TRUE);
-			icon++;
-		}
-	}
-
-		// halos
-
-	halo=server.halos;
+	icon=iface.radar.icons;
 	
-	for (n=0;n!=server.count.halo;n++) {
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Halos",halo->bitmap_name,"png");
-		halo->image_idx=view_images_load_single(path,FALSE);
-		halo++;
+	for (n=0;n!=iface.radar.nicon;n++) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Radar",icon->bitmap_name,"png");
+		icon->image_idx=view_images_load_single(path,FALSE,TRUE);
+		icon++;
 	}
-
-		// marks
-
-	mark=server.marks;
 	
-	for (n=0;n!=server.count.mark;n++) {
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Marks",mark->bitmap_name,"png");
-		mark->image_idx=view_images_load_single(path,FALSE);
-		mark++;
-	}
-
-		// crosshairs
-
-	crosshair=server.crosshairs;
-	
-	for (n=0;n!=server.count.crosshair;n++) {
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Crosshairs",crosshair->bitmap_name,"png");
-		crosshair->image_idx=view_images_load_single(path,TRUE);
-		crosshair++;
-	}
-
 		// particles
 
-	particle=server.particles;
-	
-	for (n=0;n!=server.count.particle;n++) {
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Particles",particle->bitmap_name,"png");
-		particle->image_idx=view_images_load_single(path,FALSE);
+	particle=iface.particle_list.particles;
+
+	for (n=0;n!=iface.particle_list.nparticle;n++) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Particles",particle->bitmap_name,"png");
+		particle->image_idx=view_images_load_single(path,FALSE,FALSE);
 		particle++;
 	}
 	
 		// rings
 
-	ring=server.rings;
-	
-	for (n=0;n!=server.count.ring;n++) {
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Rings",ring->bitmap_name,"png");
-		ring->image_idx=view_images_load_single(path,FALSE);
+	ring=iface.ring_list.rings;
+
+	for (n=0;n!=iface.ring_list.nring;n++) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Rings",ring->bitmap_name,"png");
+		ring->image_idx=view_images_load_single(path,FALSE,FALSE);
 		ring++;
+	}
+
+		// marks
+		
+	mark=iface.mark_list.marks;
+
+	for (n=0;n!=iface.mark_list.nmark;n++) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Marks",mark->bitmap_name,"png");
+		mark->image_idx=view_images_load_single(path,FALSE,FALSE);
+		mark++;
+	}
+
+		// halos
+
+	halo=iface.halo_list.halos;
+
+	for (n=0;n!=iface.halo_list.nhalo;n++) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Halos",halo->bitmap_name,"png");
+		halo->image_idx=view_images_load_single(path,FALSE,FALSE);
+		halo++;
+	}
+
+		// labels
+
+	label=iface.label_list.labels;
+
+	for (n=0;n!=iface.label_list.nlabel;n++) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Labels",label->bitmap_name,"png");
+		label->image_idx=view_images_load_single(path,FALSE,FALSE);
+		label++;
+	}
+
+		// crosshairs
+
+	crosshair=iface.crosshair_list.crosshairs;
+
+	for (n=0;n!=iface.crosshair_list.ncrosshair;n++) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Crosshairs",crosshair->bitmap_name,"png");
+		crosshair->image_idx=view_images_load_single(path,FALSE,TRUE);
+		crosshair++;
 	}
 
 		// remote bitmaps
 
-	if (net_setup.client.joined) {
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Network","slow","png");
-		remote_slow_image_idx=view_images_load_single(path,TRUE);
+	if (net_setup.mode!=net_mode_none) {
+		file_paths_data(&file_path_setup,path,"Bitmaps/Network","slow","png");
+		remote_slow_image_idx=view_images_load_single(path,FALSE,TRUE);
 	
-		file_paths_data(&setup.file_path_setup,path,"Bitmaps/Network","talk","png");
-		remote_talk_image_idx=view_images_load_single(path,TRUE);
+		file_paths_data(&file_path_setup,path,"Bitmaps/Network","talk","png");
+		remote_talk_image_idx=view_images_load_single(path,FALSE,TRUE);
 	}
+	
+		// virtual controls
+		
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+	
+	stick=iface.virtual_control.sticks;
+	
+	for (n=0;n!=max_virtual_stick;n++) {
+		
+		if ((stick->on) && (stick->use_bitmap)) {
+			file_paths_data(&file_path_setup,path,"Bitmaps/Virtual",stick->outer_bitmap_name,"png");
+			stick->outer_image_idx=view_images_load_single(path,FALSE,TRUE);
+		
+			file_paths_data(&file_path_setup,path,"Bitmaps/Virtual",stick->inner_bitmap_name,"png");
+			stick->inner_image_idx=view_images_load_single(path,FALSE,TRUE);
+		}
+		
+		stick++;
+	}
+
+	button=iface.virtual_control.buttons;
+	
+	for (n=0;n!=max_virtual_button;n++) {
+	
+		if ((button->on) && (button->use_bitmap)) {
+			file_paths_data(&file_path_setup,path,"Bitmaps/Virtual",button->up_bitmap_name,"png");
+			button->up_image_idx=view_images_load_single(path,FALSE,TRUE);
+	
+			file_paths_data(&file_path_setup,path,"Bitmaps/Virtual",button->down_bitmap_name,"png");
+			button->down_image_idx=view_images_load_single(path,FALSE,TRUE);
+		}
+		
+		button++;
+	}
+
+#endif
 }
 
-/* =======================================================
-
-      Free Images
-      
-======================================================= */
-
-void view_images_free(void)
+void view_images_cached_free(void)
 {
-	int					n;
-	view_image_type		*image;
-    
-		// close the images
-		
-	image=view.images;
+	int							n;
+	iface_bitmap_type			*iface_bitmap;
+	iface_radar_icon_type		*icon;
+	iface_particle_type			*particle;
+	iface_ring_type				*ring;
+ 	iface_mark_type				*mark;
+  	iface_halo_type				*halo;
+	iface_label_type			*label;
+	iface_crosshair_type		*crosshair;
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+	iface_virtual_stick_type	*stick;
+	iface_virtual_button_type	*button;
+#endif
+
+		// hud bitmaps
+
+	iface_bitmap=iface.bitmap_list.bitmaps;
 	
-	for (n=0;n!=view.count.image;n++) {
-		image->path[0]=0x0;
-		bitmap_close(&image->bitmap);
-		image++;
+	for (n=0;n!=iface.bitmap_list.nbitmap;n++) {
+		view_images_free_single(iface_bitmap->image_idx);
+		iface_bitmap++;
 	}
+
+		// radar
+
+	if (iface.radar.on) {
+	
+			// radar background
+
+		view_images_free_single(iface.radar.background_image_idx);
+
+			// radar icons
+		
+		icon=iface.radar.icons;
+		
+		for (n=0;n!=iface.radar.nicon;n++) {
+			view_images_free_single(icon->image_idx);
+			icon++;
+		}
+	}
+	
+		// particles
+
+	particle=iface.particle_list.particles;
+
+	for (n=0;n!=iface.particle_list.nparticle;n++) {
+		view_images_free_single(particle->image_idx);
+		particle++;
+	}
+	
+		// rings
+
+	ring=iface.ring_list.rings;
+
+	for (n=0;n!=iface.ring_list.nring;n++) {
+		view_images_free_single(ring->image_idx);
+		ring++;
+	}
+
+		// marks
+		
+	mark=iface.mark_list.marks;
+
+	for (n=0;n!=iface.mark_list.nmark;n++) {
+		view_images_free_single(mark->image_idx);
+		mark++;
+	}
+	
+		// halos
+
+	halo=iface.halo_list.halos;
+
+	for (n=0;n!=iface.halo_list.nhalo;n++) {
+		view_images_free_single(halo->image_idx);
+		halo++;
+	}
+
+		// labels
+
+	label=iface.label_list.labels;
+
+	for (n=0;n!=iface.label_list.nlabel;n++) {
+		view_images_free_single(label->image_idx);
+		label++;
+	}
+
+		// crosshairs
+
+	crosshair=iface.crosshair_list.crosshairs;
+
+	for (n=0;n!=iface.crosshair_list.ncrosshair;n++) {
+		view_images_free_single(crosshair->image_idx);
+		crosshair++;
+	}
+
+		// remote bitmaps
+
+	if (net_setup.mode!=net_mode_none) {
+		view_images_free_single(remote_slow_image_idx);
+		view_images_free_single(remote_talk_image_idx);
+	}
+	
+		// virtual controls
+		
+#if defined(D3_OS_IPHONE) || defined(D3_OS_ANDRIOD)
+
+	stick=iface.virtual_control.sticks;
+	
+	for (n=0;n!=max_virtual_stick;n++) {
+	
+		if ((stick->on) && (stick->use_bitmap)) {
+			view_images_free_single(stick->outer_image_idx);
+			view_images_free_single(stick->inner_image_idx);
+		}
+		
+		stick++;
+	}
+
+	button=iface.virtual_control.buttons;
+	
+	for (n=0;n!=max_virtual_button;n++) {
+	
+		if ((button->on) && (button->use_bitmap)) {
+			view_images_free_single(button->up_image_idx);
+			view_images_free_single(button->down_image_idx);
+		}
+		
+		button++;
+	}
+
+#endif
 }
 
 /* =======================================================
@@ -216,12 +477,27 @@ void view_images_free(void)
       
 ======================================================= */
 
-inline bitmap_type* view_images_get_bitmap(int idx)
+bool view_images_is_empty(int idx)
 {
-	return(&view.images[idx].bitmap);
+	return(idx==0);
 }
 
-inline unsigned long view_images_get_gl_id(int idx)
+bitmap_type* view_images_get_bitmap(int idx)
 {
-	return(view.images[idx].bitmap.gl_id);
+	view_image_type			*image;
+	
+		// sanity check for bad bitmaps
+		
+	if ((idx<0) || (idx>=max_view_image)) idx=0;
+	
+	image=&view.images[idx];
+	return(&image->bitmap);
+}
+
+unsigned long view_images_get_gl_id(int idx)
+{
+	bitmap_type			*bitmap;
+	
+	bitmap=view_images_get_bitmap(idx);
+	return(bitmap->gl_id);
 }
