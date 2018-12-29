@@ -427,7 +427,7 @@ bool png_utility_check(char *path,char *err_str)
 
 bool png_utility_copy_compare_paths(char *srce_path,char *dest_path)
 {
-	int				n,len;
+	size_t			n,len;
 	char			ch1,ch2;
 
 	len=strlen(srce_path);
